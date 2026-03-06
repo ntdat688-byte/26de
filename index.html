@@ -2,7 +2,7 @@
 <html lang="vi" class="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Hệ Thống Video Giải Đề - Giáo Dục Tâm Đức</title>
     
     <!-- Tối ưu hóa tải trang (Preconnect) -->
@@ -34,13 +34,17 @@
         .dark ::-webkit-scrollbar-thumb { background: #475569; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         
+        /* Ẩn thanh cuộn cho các khu vực vuốt ngang trên Mobile */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
         /* Hiệu ứng mượt mà cho Dark Mode */
         html.transition-colors * { transition-property: background-color, border-color, color, fill, stroke; transition-duration: 300ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
     </style>
 </head>
-<body class="bg-[#F8FAFC] dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans pb-24 selection:bg-purple-200 selection:text-purple-900 transition-colors duration-300">
+<body class="bg-[#F8FAFC] dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans pb-20 md:pb-24 selection:bg-purple-200 selection:text-purple-900 transition-colors duration-300">
     <div id="root">
-        <!-- Màn hình chờ (Hiển thị ngay lập tức trong lúc tải thư viện React & Firebase) -->
+        <!-- Màn hình chờ (Hiển thị ngay lập tức) -->
         <div style="display: flex; min-height: 100vh; flex-direction: column; align-items: center; justify-content: center; background-color: #F8FAFC;">
             <div style="width: 48px; height: 48px; border: 4px solid #a855f7; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
             <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
@@ -56,7 +60,7 @@
         const { useState, useEffect, useMemo } = React;
 
         // ==========================================
-        // CẤU HÌNH FIREBASE CỦA BẠN
+        // CẤU HÌNH FIREBASE
         // ==========================================
         const firebaseConfig = {
             apiKey: "AIzaSyD9CxZobvHbBbLmsOTgpheRBaM4WbilEUk",
@@ -99,20 +103,17 @@
         const removeAccents = (str) => str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
 
         function App() {
-            // Core States
             const [exams, setExams] = useState([]);
             const [loading, setLoading] = useState(true);
             const [isDarkMode, setIsDarkMode] = useState(false);
             
-            // UI States
             const [filter, setFilter] = useState('ALL');
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedExam, setSelectedExam] = useState(null);
             
-            // Admin States
             const [isAdmin, setIsAdmin] = useState(false);
 
-            // 1. Dark Mode Init
+            // Khởi tạo Dark Mode
             useEffect(() => {
                 const savedTheme = localStorage.getItem('theme');
                 if (savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -135,19 +136,15 @@
                 setIsDarkMode(!isDarkMode);
             };
 
-            // 2. Auth Ẩn danh để đọc/ghi Firebase
+            // Auth Ẩn danh
             useEffect(() => {
                 const initAuth = async () => {
-                    try {
-                        await signInAnonymously(auth);
-                    } catch (error) {
-                        console.error("Lỗi đăng nhập Firebase:", error);
-                    }
+                    try { await signInAnonymously(auth); } catch (error) { console.error("Lỗi đăng nhập:", error); }
                 };
                 initAuth();
             }, []);
 
-            // 3. Lấy dữ liệu Đề thi
+            // Lấy dữ liệu Đề thi
             useEffect(() => {
                 const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams_v4');
                 const unsubscribe = onSnapshot(examsRef, async (snapshot) => {
@@ -161,8 +158,7 @@
                                 videos: [{ part: 'Phần 1', title: 'Trắc nghiệm', url: '' }, { part: 'Phần 2', title: 'Đúng sai', url: '' }, { part: 'Phần 3', title: 'Trả lời ngắn', url: '' }]
                             }));
                         }
-                        // Chạy song song thay vì tuần tự để tiết kiệm thời gian
-                        await Promise.all(batchPromises);
+                        await Promise.all(batchPromises); // Chạy đa luồng tải siêu nhanh
                     } else {
                         const fetchedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.order - b.order);
                         setExams(fetchedExams);
@@ -172,7 +168,7 @@
                 return () => unsubscribe();
             }, []);
 
-            // Tìm kiếm & Lọc
+            // Tìm kiếm
             const filteredExams = useMemo(() => {
                 return exams.filter(exam => {
                     const matchType = filter === 'ALL' || exam.type === filter;
@@ -200,32 +196,32 @@
             return (
                 <div className="font-sans min-h-screen">
                     {/* --- HEADER --- */}
-                    <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md shadow-sm sticky top-0 z-30 border-b border-slate-200 dark:border-slate-800">
-                        <div className="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+                    <header className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-sm sticky top-0 z-30 border-b border-slate-200 dark:border-slate-800">
+                        <div className="max-w-7xl mx-auto px-4 py-3 md:py-4 flex justify-between items-center">
                             <div className="flex items-center">
                                 <img 
                                     src="LOGO_7 (2).png" 
                                     alt="Giáo Dục Tâm Đức" 
-                                    className="h-10 md:h-12 w-auto object-contain"
+                                    className="h-8 sm:h-10 md:h-12 w-auto object-contain"
                                     onError={(e) => {
                                         e.target.onerror = null;
                                         e.target.style.display = 'none';
                                         e.target.nextSibling.style.display = 'flex';
                                     }}
                                 />
-                                <div className="hidden items-center gap-3">
+                                <div className="hidden items-center gap-2 md:gap-3">
                                     <div className="bg-gradient-to-br from-[#FF2E63] to-purple-600 p-2 rounded-xl shadow-lg shadow-purple-500/30">
-                                        <IconGraduationCap className="w-6 h-6 text-white" />
+                                        <IconGraduationCap className="w-5 h-5 md:w-6 md:h-6 text-white" />
                                     </div>
                                     <div>
-                                        <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF2E63] to-purple-600 uppercase tracking-tight hidden sm:block">Giáo Dục Tâm Đức</h1>
-                                        <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF2E63] to-purple-600 uppercase tracking-tight sm:hidden">Tâm Đức</h1>
+                                        <h1 className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF2E63] to-purple-600 uppercase tracking-tight hidden sm:block">Giáo Dục Tâm Đức</h1>
+                                        <h1 className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF2E63] to-purple-600 uppercase tracking-tight sm:hidden">Tâm Đức</h1>
                                     </div>
                                 </div>
                             </div>
                             
                             <div className="flex items-center gap-2 sm:gap-4">
-                                <button onClick={toggleDarkMode} className="p-2.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+                                <button onClick={toggleDarkMode} className="p-2 md:p-2.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                     {isDarkMode ? <IconSun className="w-5 h-5"/> : <IconMoon className="w-5 h-5"/>}
                                 </button>
                                 
@@ -233,23 +229,23 @@
                                     if(isAdmin) { setIsAdmin(false); return; }
                                     const pass = prompt("Nhập mật khẩu Admin:");
                                     if (pass === 'admin2026') setIsAdmin(true); else if (pass) alert("Sai mật khẩu!");
-                                }} className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all shadow-sm border ${isAdmin ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
-                                    {isAdmin ? "Thoát Admin" : <><IconLock className="w-4 h-4"/> Quản trị</>}
+                                }} className={`flex items-center gap-2 px-4 md:px-5 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-bold transition-all shadow-sm border ${isAdmin ? 'bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800' : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                                    {isAdmin ? "Thoát Admin" : <><IconLock className="w-3.5 h-3.5 md:w-4 md:h-4"/> <span className="hidden sm:inline">Quản trị</span></>}
                                 </button>
                             </div>
                         </div>
                     </header>
 
                     {/* --- HERO SECTION --- */}
-                    <div className="max-w-7xl mx-auto px-4 mt-8 mb-10">
-                        <div className="bg-gradient-to-r from-[#FF2E63] via-[#E91E63] to-purple-600 text-white py-12 px-6 sm:px-10 rounded-[2rem] shadow-xl shadow-purple-500/20 relative overflow-hidden flex flex-col items-center text-center">
-                            <div className="absolute top-0 right-0 w-80 h-80 bg-white opacity-[0.05] rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
+                    <div className="max-w-7xl mx-auto px-4 mt-4 md:mt-8 mb-8 md:mb-10">
+                        <div className="bg-gradient-to-r from-[#FF2E63] via-[#E91E63] to-purple-600 text-white py-10 md:py-12 px-6 sm:px-10 rounded-3xl md:rounded-[2rem] shadow-xl shadow-purple-500/20 relative overflow-hidden flex flex-col items-center text-center">
+                            <div className="absolute top-0 right-0 w-80 h-80 bg-white opacity-[0.05] rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
                             
                             <div className="relative z-10 max-w-2xl">
-                                <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-4 uppercase">
-                                    GIÁO DỤC TÂM ĐỨC <span className="bg-[#FFD700] text-purple-800 text-[11px] font-black px-2 py-0.5 rounded-full align-middle ml-2 shadow-sm">PRO</span>
+                                <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold tracking-tight mb-3 md:mb-4 uppercase">
+                                    GIÁO DỤC TÂM ĐỨC <span className="bg-[#FFD700] text-purple-800 text-[10px] md:text-[11px] font-black px-2 py-0.5 rounded-full align-middle ml-2 shadow-sm">PRO</span>
                                 </h2>
-                                <p className="text-pink-100 text-base md:text-lg font-medium leading-relaxed">
+                                <p className="text-pink-100 text-sm md:text-base lg:text-lg font-medium leading-relaxed">
                                     Hệ thống tổng hợp video giải chi tiết 26 đề thi bám sát chương trình. Luyện đề dễ dàng, nắm chắc kiến thức!
                                 </p>
                             </div>
@@ -258,55 +254,59 @@
 
                     {/* --- TÌM KIẾM & BỘ LỌC --- */}
                     <div className="max-w-7xl mx-auto px-4">
-                        <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-10">
-                            <div className="bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 p-1.5 flex flex-wrap w-full md:w-auto">
-                                {[{ id: 'ALL', label: 'Tất cả 26 Đề' }, { id: 'GK2', label: '10 Đề GK2' }, { id: 'CK2', label: '16 Đề CK2' }].map((f) => (
-                                <button key={f.id} onClick={() => setFilter(f.id)} className={`flex-1 md:flex-none px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 ${filter === f.id ? 'bg-gradient-to-r from-[#FF2E63] to-purple-600 text-white shadow-md' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
-                                    {f.label}
-                                </button>
-                                ))}
+                        <div className="flex flex-col md:flex-row justify-between items-center gap-4 md:gap-6 mb-8 md:mb-10">
+                            
+                            {/* Scrollable Tabs trên Mobile */}
+                            <div className="w-full md:w-auto overflow-x-auto hide-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
+                                <div className="bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 p-1.5 inline-flex w-max md:w-auto gap-1">
+                                    {[{ id: 'ALL', label: 'Tất cả 26 Đề' }, { id: 'GK2', label: '10 Đề GK2' }, { id: 'CK2', label: '16 Đề CK2' }].map((f) => (
+                                    <button key={f.id} onClick={() => setFilter(f.id)} className={`px-5 md:px-6 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-bold transition-all duration-300 whitespace-nowrap ${filter === f.id ? 'bg-gradient-to-r from-[#FF2E63] to-purple-600 text-white shadow-md' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
+                                        {f.label}
+                                    </button>
+                                    ))}
+                                </div>
                             </div>
+
                             <div className="relative group w-full md:w-80">
-                                <IconSearch className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 z-10" />
-                                <input type="text" placeholder="Tìm kiếm 'đề 1'..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-purple-400 dark:focus:border-purple-500 rounded-full py-3 pl-12 pr-6 outline-none transition-all shadow-sm text-slate-700 dark:text-slate-200 font-medium text-sm" />
+                                <IconSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 z-10" />
+                                <input type="text" placeholder="Tìm kiếm 'đề 1'..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-purple-400 dark:focus:border-purple-500 rounded-full py-2.5 md:py-3 pl-10 pr-6 outline-none transition-all shadow-sm text-slate-700 dark:text-slate-200 font-medium text-sm" />
                             </div>
                         </div>
 
                         {/* --- GRID ĐỀ THI --- */}
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 gap-y-10">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 gap-y-8 md:gap-y-10">
                             {filteredExams.map((exam, index) => {
                                 const availableVideosCount = exam.videos.filter(v => v.url && v.url.trim() !== '').length;
-
                                 const badgeColors = ['bg-[#9C27B0]', 'bg-[#FF2E63]', 'bg-[#FF9800]', 'bg-[#2196F3]'];
                                 const bgC = badgeColors[index % badgeColors.length];
 
                                 return (
-                                <div key={exam.id} className="relative pt-4 pl-4">
-                                    <div className={`absolute top-0 left-0 w-10 h-10 ${bgC} text-white rounded-full flex items-center justify-center font-black text-sm shadow-lg z-10 border-[3px] border-white dark:border-slate-900`}>{exam.order}</div>
-                                    <div onClick={() => setSelectedExam(exam)} className="group bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:shadow-purple-500/10 hover:border-purple-300 dark:hover:border-purple-500 transition-all cursor-pointer flex flex-col h-full relative overflow-hidden">
-                                        <div className="p-6 flex-1 flex flex-col">
-                                            <div className="flex justify-between items-start mb-4">
-                                                <span className={`px-2.5 py-1 text-[10px] font-black rounded uppercase tracking-wider ${exam.type === 'GK2' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'}`}>
+                                <div key={exam.id} className="relative pt-3 pl-3 md:pt-4 md:pl-4">
+                                    <div className={`absolute top-0 left-0 w-8 h-8 md:w-10 md:h-10 ${bgC} text-white rounded-full flex items-center justify-center font-black text-xs md:text-sm shadow-lg z-10 border-[3px] border-white dark:border-slate-900`}>{exam.order}</div>
+                                    <div onClick={() => setSelectedExam(exam)} className="group bg-white dark:bg-slate-800 rounded-2xl md:rounded-[1.5rem] border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:shadow-purple-500/10 hover:border-purple-300 dark:hover:border-purple-500 transition-all cursor-pointer flex flex-col h-full relative overflow-hidden">
+                                        <div className="p-5 md:p-6 flex-1 flex flex-col">
+                                            <div className="flex justify-between items-start mb-3 md:mb-4">
+                                                <span className={`px-2 py-1 text-[9px] md:text-[10px] font-black rounded uppercase tracking-wider ${exam.type === 'GK2' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'}`}>
                                                     {exam.type === 'GK2' ? 'Giữa Kỳ 2' : 'Cuối Kỳ 2'}
                                                 </span>
-                                                {isAdmin && <div className="bg-slate-100 dark:bg-slate-700 p-1.5 rounded-lg text-slate-500"><IconEdit3 className="w-4 h-4" /></div>}
+                                                {isAdmin && <div className="bg-slate-100 dark:bg-slate-700 p-1.5 rounded-lg text-slate-500"><IconEdit3 className="w-3 h-3 md:w-4 md:h-4" /></div>}
                                             </div>
-                                            <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 mb-6 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{exam.title}</h3>
+                                            <h3 className="text-lg md:text-xl font-extrabold text-slate-800 dark:text-slate-100 mb-4 md:mb-6 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors line-clamp-2">{exam.title}</h3>
                                             
-                                            <div className="mt-auto pt-5 flex items-center justify-between border-t border-slate-50 dark:border-slate-700/50">
+                                            <div className="mt-auto pt-4 md:pt-5 flex items-center justify-between border-t border-slate-50 dark:border-slate-700/50">
                                                <div className="flex items-center gap-2">
                                                   <div className={`p-1.5 rounded-lg transition-colors ${availableVideosCount > 0 ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-500' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>
-                                                     <IconVideo className="w-4 h-4" />
+                                                     <IconVideo className="w-3.5 h-3.5 md:w-4 md:h-4" />
                                                   </div>
-                                                  <span className="text-[13px] font-bold text-slate-600 dark:text-slate-300">{availableVideosCount}/3 Phần</span>
+                                                  <span className="text-xs md:text-[13px] font-bold text-slate-600 dark:text-slate-300">{availableVideosCount}/3 Phần</span>
                                                </div>
                                                
                                                {availableVideosCount === 3 ? (
-                                                 <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-md flex items-center gap-1 border border-emerald-100 dark:border-emerald-800">
+                                                 <span className="text-[10px] md:text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-md flex items-center gap-1 border border-emerald-100 dark:border-emerald-800">
                                                    <IconCheckCircle className="w-3 h-3" /> Full
                                                  </span>
                                                ) : (
-                                                 <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
+                                                 <span className="text-[10px] md:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
                                                    Đang cập nhật
                                                  </span>
                                                )}
@@ -319,7 +319,7 @@
                         </div>
                     </div>
 
-                    {/* --- EXAM MODAL (XEM VIDEO) --- */}
+                    {/* --- EXAM MODAL (XEM VIDEO CHUẨN YOUTUBE MOBILE) --- */}
                     {selectedExam && (
                         <ExamModal 
                             exam={selectedExam} 
@@ -360,43 +360,50 @@
             const ytId = getYouTubeId(currentVideo.url);
 
             return (
-                <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4 bg-slate-900/90 backdrop-blur-md transition-all">
-                    <div className={`bg-white dark:bg-slate-900 w-full ${isTheaterMode ? 'md:max-w-[1500px]' : 'md:w-[90vw] md:max-w-7xl'} h-[95vh] md:h-[90vh] rounded-t-3xl md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-300`}>
+                // Lớp phủ nền Modal (tràn viền trên Mobile, có padding trên Desktop)
+                <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-slate-900/95 md:bg-slate-900/80 backdrop-blur-md transition-all">
+                    
+                    {/* Khung Modal (100dvh trên Mobile) */}
+                    <div className={`bg-white dark:bg-slate-900 w-full ${isTheaterMode ? 'md:max-w-[1500px]' : 'md:w-[90vw] md:max-w-7xl'} h-[100dvh] md:h-[90vh] rounded-none md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800 animate-in slide-in-from-bottom-5 md:zoom-in-95 duration-300`}>
                         
-                        <div className="px-5 md:px-8 py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-between items-center z-20 shrink-0">
-                            <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded text-[10px] font-black uppercase">Đề {exam.order}/26</span>
+                        {/* --- HEADER MODAL --- */}
+                        <div className="px-4 md:px-8 py-3 md:py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-between items-center z-20 shrink-0">
+                            <div className="min-w-0 pr-4">
+                                <div className="flex items-center gap-2 mb-0.5 md:mb-1">
+                                    <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded text-[9px] md:text-[10px] font-black uppercase">Đề {exam.order}/26</span>
                                 </div>
-                                <h2 className="text-xl font-black text-slate-800 dark:text-slate-100">{exam.title}</h2>
+                                <h2 className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-100 truncate">{exam.title}</h2>
                             </div>
-                            <button onClick={onClose} className="p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 text-slate-500 rounded-full"><IconX className="w-5 h-5" /></button>
+                            <button onClick={onClose} className="p-2 md:p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 text-slate-500 rounded-full shrink-0"><IconX className="w-5 h-5 md:w-5 md:h-5" /></button>
                         </div>
 
+                        {/* --- CONTENT AREA (Chia 2 cột trên PC, xếp chồng trên Mobile) --- */}
                         <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative bg-slate-50 dark:bg-slate-950">
                             
+                            {/* CỘT TRÁI (Danh sách Phần) - Trở thành Bottom List trên Mobile */}
                             {!isTheaterMode && (
-                                <div className="w-full md:w-80 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 p-4 flex flex-col shrink-0 overflow-y-auto order-2 md:order-1 z-10">
-                                    <div className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">Danh mục bài giảng</div>
-                                    <div className="flex flex-col gap-3">
+                                <div className="w-full md:w-80 flex-1 md:flex-none bg-white dark:bg-slate-900 border-t md:border-t-0 md:border-r border-slate-200 dark:border-slate-800 p-4 md:p-5 flex flex-col overflow-y-auto order-2 md:order-1 z-10">
+                                    <div className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider mb-3 md:mb-4">Danh mục bài giảng</div>
+                                    <div className="flex flex-col gap-2 md:gap-3">
                                         {formData.map((vid, idx) => {
                                             const hasLink = !!getYouTubeId(vid.url);
                                             return (
-                                                <button key={idx} onClick={() => setActiveTab(idx)} className={`flex flex-col text-left p-4 rounded-2xl transition-all border-2 ${activeTab === idx ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'border-transparent bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                                                    <span className={`font-black text-base mb-1 ${activeTab === idx ? 'text-purple-600 dark:text-purple-400' : 'text-slate-700 dark:text-slate-200'}`}>{vid.part}</span>
-                                                    <span className="text-sm text-slate-500 dark:text-slate-400 flex items-center justify-between font-medium w-full">
+                                                <button key={idx} onClick={() => setActiveTab(idx)} className={`flex flex-col text-left p-3.5 md:p-4 rounded-xl md:rounded-2xl transition-all border-2 ${activeTab === idx ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-sm' : 'border-transparent bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
+                                                    <span className={`font-black text-sm md:text-base mb-1 ${activeTab === idx ? 'text-purple-600 dark:text-purple-400' : 'text-slate-700 dark:text-slate-200'}`}>{vid.part}</span>
+                                                    <span className="text-xs md:text-sm text-slate-500 dark:text-slate-400 flex items-center justify-between font-medium w-full">
                                                         <span className="truncate pr-2">{vid.title}</span>
-                                                        {hasLink ? <IconCheckCircle className="w-5 h-5 text-emerald-500 shrink-0" /> : <div className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"/>}
+                                                        {hasLink ? <IconCheckCircle className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 shrink-0" /> : <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"/>}
                                                     </span>
                                                 </button>
                                             );
                                         })}
                                     </div>
 
+                                    {/* Khu vực Admin Save */}
                                     {isAdmin && (
-                                        <div className="mt-auto pt-6 border-t border-slate-100 dark:border-slate-800">
+                                        <div className="mt-auto pt-5 md:pt-6 border-t border-slate-100 dark:border-slate-800">
                                             {!editMode ? (
-                                                <button onClick={() => setEditMode(true)} className="w-full flex justify-center gap-2 py-3 bg-slate-800 text-white rounded-xl text-sm font-bold shadow-md"><IconEdit3 className="w-4 h-4" /> Bật sửa Link</button>
+                                                <button onClick={() => setEditMode(true)} className="w-full flex justify-center gap-2 py-3 md:py-3.5 bg-slate-800 text-white rounded-xl text-sm font-bold shadow-md"><IconEdit3 className="w-4 h-4" /> Bật sửa Link</button>
                                             ) : (
                                                 <div className="flex flex-col gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-100 dark:border-amber-900/50">
                                                     <button onClick={handleSaveLinks} disabled={isSaving} className="w-full py-3 bg-emerald-500 text-white rounded-xl text-sm font-bold shadow-md">Lưu Tất Cả</button>
@@ -408,43 +415,49 @@
                                 </div>
                             )}
 
-                            <div className="flex-1 flex flex-col overflow-y-auto order-1 md:order-2">
+                            {/* CỘT PHẢI (Video Area) - Dính chắt ở Top trên Mobile */}
+                            <div className="w-full md:flex-1 flex flex-col shrink-0 md:min-h-0 order-1 md:order-2 bg-slate-50 dark:bg-slate-950">
                                 
-                                <div className="p-4 md:p-6 pb-0 flex justify-between items-center gap-4 bg-slate-50 dark:bg-slate-950">
-                                    <h3 className="text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
-                                        <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg"><IconPlay className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="currentColor"/></div>
-                                        {currentVideo.part}
-                                    </h3>
-                                    {!editMode && (
-                                        <button onClick={() => setIsTheaterMode(!isTheaterMode)} className="flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold shadow-sm">
-                                            {isTheaterMode ? <><IconMinimize className="w-4 h-4" /> <span className="hidden sm:inline">Thu nhỏ</span></> : <><IconMaximize className="w-4 h-4" /> <span className="hidden sm:inline">Phóng to</span></>}
-                                        </button>
-                                    )}
-                                </div>
-
-                                <div className="p-4 md:p-6 w-full max-w-6xl mx-auto flex flex-col gap-6">
-                                    
-                                    <div className="w-full bg-black rounded-2xl md:rounded-[2rem] overflow-hidden shadow-2xl relative aspect-video border border-slate-200 dark:border-slate-800">
+                                {/* Khung Video 16:9 - Full màn hình ngang trên Mobile */}
+                                <div className="w-full p-0 md:p-6 pb-0 md:pb-6 shrink-0 z-20">
+                                    <div className="w-full bg-black relative aspect-video md:rounded-[2rem] overflow-hidden md:shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800">
                                         {editMode ? (
-                                            <div className="absolute inset-0 bg-white dark:bg-slate-900 p-8 flex flex-col justify-center">
-                                                <label className="block text-sm font-black mb-2">Đường dẫn YouTube URL (Cho {currentVideo.part})</label>
-                                                <input type="text" value={currentVideo.url} onChange={(e) => handleUrlChange(activeTab, e.target.value)} className="w-full border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-2xl px-5 py-4 outline-none font-medium text-slate-800 dark:text-white mb-4" placeholder="Dán link vào đây..." />
-                                                {ytId ? <p className="text-emerald-500 font-bold flex items-center gap-2"><IconCheckCircle className="w-5 h-5"/> Nhận diện thành công ID: {ytId}</p> : (currentVideo.url && <p className="text-rose-500 font-bold">Link không hợp lệ!</p>)}
+                                            <div className="absolute inset-0 bg-white dark:bg-slate-900 p-4 md:p-8 flex flex-col justify-center">
+                                                <label className="block text-xs md:text-sm font-black mb-1.5 md:mb-2 text-slate-700 dark:text-slate-200 uppercase tracking-wide">Đường dẫn YouTube URL (Cho {currentVideo.part})</label>
+                                                <input type="text" value={currentVideo.url} onChange={(e) => handleUrlChange(activeTab, e.target.value)} className="w-full border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl md:rounded-2xl px-4 md:px-5 py-3 md:py-4 outline-none font-medium text-slate-800 dark:text-white mb-2 md:mb-4 text-sm" placeholder="Dán link vào đây..." />
+                                                {ytId ? <p className="text-emerald-500 text-xs md:text-sm font-bold flex items-center gap-1 md:gap-2"><IconCheckCircle className="w-4 h-4 md:w-5 md:h-5"/> Nhận diện thành công ID: {ytId}</p> : (currentVideo.url && <p className="text-rose-500 text-xs md:text-sm font-bold flex items-center gap-1 md:gap-2"><IconAlertCircle className="w-4 h-4 md:w-5 md:h-5"/> Link không hợp lệ!</p>)}
                                             </div>
                                         ) : (
                                             ytId ? (
-                                                <iframe src={`https://www.youtube.com/embed/${ytId}?rel=0`} className="absolute inset-0 w-full h-full" frameBorder="0" allowFullScreen></iframe>
+                                                <iframe src={`https://www.youtube.com/embed/${ytId}?rel=0&playsinline=1`} className="absolute inset-0 w-full h-full" frameBorder="0" allowFullScreen></iframe>
                                             ) : (
-                                                <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-slate-900">
-                                                    <div className="w-20 h-20 bg-white/5 rounded-full flex items-center justify-center mb-4"><IconVideo className="w-10 h-10 text-white/30" /></div>
-                                                    <h4 className="text-white font-black text-xl mb-2">Video Đang Biên Tập</h4>
-                                                    <p className="text-white/50 text-sm">Bài giảng sẽ sớm được cập nhật lên hệ thống.</p>
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 md:p-8 text-center bg-slate-900">
+                                                    <div className="w-16 h-16 md:w-20 md:h-20 bg-white/5 rounded-full flex items-center justify-center mb-3 md:mb-4"><IconVideo className="w-8 h-8 md:w-10 md:h-10 text-white/30" /></div>
+                                                    <h4 className="text-white font-black text-lg md:text-xl mb-1.5 md:mb-2">Video Đang Biên Tập</h4>
+                                                    <p className="text-white/50 text-xs md:text-sm">Bài giảng sẽ sớm được cập nhật lên hệ thống.</p>
                                                 </div>
                                             )
                                         )}
                                     </div>
-
                                 </div>
+
+                                {/* Thông tin Dưới Video (Tiêu đề, Phóng to) */}
+                                <div className="p-4 md:px-6 md:pt-0 flex-1 overflow-y-auto">
+                                    <div className="flex justify-between items-center bg-white md:bg-transparent dark:bg-slate-800 md:dark:bg-transparent p-3 md:p-0 rounded-2xl md:rounded-none shadow-sm md:shadow-none border border-slate-100 md:border-transparent dark:border-slate-700 md:dark:border-transparent">
+                                        <h3 className="text-base md:text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 md:gap-3">
+                                            <div className="p-1.5 md:p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg"><IconPlay className="w-4 h-4 md:w-5 md:h-5 text-purple-600 dark:text-purple-400" fill="currentColor"/></div>
+                                            {currentVideo.part}
+                                        </h3>
+                                        {!editMode && (
+                                            <button onClick={() => setIsTheaterMode(!isTheaterMode)} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold shadow-sm hover:text-purple-600 transition-colors">
+                                                {isTheaterMode ? <><IconMinimize className="w-4 h-4" /> Thu nhỏ</> : <><IconMaximize className="w-4 h-4" /> Phóng to</>}
+                                            </button>
+                                        )}
+                                    </div>
+                                    {/* Khoảng trống tạo độ mượt khi vuốt trên mobile */}
+                                    <div className="h-4 md:hidden"></div>
+                                </div>
+
                             </div>
                         </div>
                     </div>
