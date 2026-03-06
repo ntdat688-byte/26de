@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hệ Thống Video Giải Đề - Giáo Dục Tâm Đức</title>
     
+    <!-- Tối ưu hóa tải trang (Preconnect) -->
+    <link rel="preconnect" href="https://cdn.tailwindcss.com">
+    <link rel="preconnect" href="https://unpkg.com">
+    <link rel="preconnect" href="https://www.gstatic.com">
+    
     <!-- Cài đặt Tailwind CSS và cấu hình Dark Mode -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -34,7 +39,14 @@
     </style>
 </head>
 <body class="bg-[#F8FAFC] dark:bg-slate-900 text-slate-800 dark:text-slate-100 font-sans pb-24 selection:bg-purple-200 selection:text-purple-900 transition-colors duration-300">
-    <div id="root"></div>
+    <div id="root">
+        <!-- Màn hình chờ (Hiển thị ngay lập tức trong lúc tải thư viện React & Firebase) -->
+        <div style="display: flex; min-height: 100vh; flex-direction: column; align-items: center; justify-content: center; background-color: #F8FAFC;">
+            <div style="width: 48px; height: 48px; border: 4px solid #a855f7; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
+            <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
+            <p style="color: #475569; font-weight: 500; font-family: sans-serif;">Đang kết nối hệ thống Tâm Đức...</p>
+        </div>
+    </div>
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
@@ -140,14 +152,17 @@
                 const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams_v4');
                 const unsubscribe = onSnapshot(examsRef, async (snapshot) => {
                     if (snapshot.empty) {
+                        const batchPromises = [];
                         for (let i = 1; i <= 26; i++) {
                             const type = i <= 10 ? 'GK2' : 'CK2';
                             const examId = `exam_v4_${i.toString().padStart(2, '0')}`;
-                            await setDoc(doc(examsRef, examId), {
+                            batchPromises.push(setDoc(doc(examsRef, examId), {
                                 id: examId, title: `Đề thi số ${i}`, type: type, order: i,
                                 videos: [{ part: 'Phần 1', title: 'Trắc nghiệm', url: '' }, { part: 'Phần 2', title: 'Đúng sai', url: '' }, { part: 'Phần 3', title: 'Trả lời ngắn', url: '' }]
-                            });
+                            }));
                         }
+                        // Chạy song song thay vì tuần tự để tiết kiệm thời gian
+                        await Promise.all(batchPromises);
                     } else {
                         const fetchedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.order - b.order);
                         setExams(fetchedExams);
