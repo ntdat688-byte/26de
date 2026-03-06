@@ -30,7 +30,13 @@
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
             // Thay thế thông tin cấu hình Firebase của bạn vào đây nếu chạy độc lập bên ngoài
         };
-        const app = initializeApp(firebaseConfig);
+        const app = initializeApp(apiKey: "AIzaSyD9CxZobvHbBbLmsOTgpheRBaM4WbilEUk",
+  authDomain: "ntd688-4ed85.firebaseapp.com",
+  projectId: "ntd688-4ed85",
+  storageBucket: "ntd688-4ed85.firebasestorage.app",
+  messagingSenderId: "471849948327",
+  appId: "1:471849948327:web:4d1a9c3e466cc7837cb782",
+  measurementId: "G-N8NB27794M");
         const auth = getAuth(app);
         const db = getFirestore(app);
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'demo-video-edu-app';
