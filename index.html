@@ -12,41 +12,53 @@
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     
-    <!-- Cài đặt Babel để biên dịch JSX -->
+    <!-- Cài đặt Babel để biên dịch JSX trực tiếp trên trình duyệt -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body class="bg-[#F8FAFC] text-slate-800 font-sans pb-24 selection:bg-purple-200 selection:text-purple-900">
     <div id="root"></div>
 
+    <!-- Script chính chứa logic ứng dụng -->
     <script type="text/babel" data-type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, onSnapshot, doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
         const { useState, useEffect, useMemo } = React;
 
-        // =====================================================================
-        // ⚙️ KHU VỰC CẤU HÌNH GOOGLE SHEETS (BẠN ĐIỀN LINK VÀO ĐÂY)
-        // =====================================================================
+        // ==========================================
+        // CẤU HÌNH FIREBASE CỦA BẠN ĐÃ ĐƯỢC TÍCH HỢP
+        // ==========================================
+        const firebaseConfig = {
+            apiKey: "AIzaSyD9CxZobvHbBbLmsOTgpheRBaM4WbilEUk",
+            authDomain: "ntd688-4ed85.firebaseapp.com",
+            projectId: "ntd688-4ed85",
+            storageBucket: "ntd688-4ed85.firebasestorage.app",
+            messagingSenderId: "471849948327",
+            appId: "1:471849948327:web:4d1a9c3e466cc7837cb782",
+            measurementId: "G-N8NB27794M"
+        };
         
-        // 1. Link File Google Sheets của bạn (Copy từ thanh địa chỉ trình duyệt)
-        // Dùng để khi bấm nút "Cập nhật dữ liệu", nó sẽ mở file Excel ra cho bạn sửa.
-        const GOOGLE_SHEET_EDIT_URL = "https://www.facebook.com/gdtamduc"; 
-
-        // 2. Link CSV (Lấy từ menu: Tệp -> Chia sẻ -> Công bố lên web -> Chọn định dạng CSV)
-        // Trang web sẽ tự động lấy dữ liệu từ link này.
-        const PUBLISHED_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSqV0mcwrgYRK21oOvfF7XIEaHQknPVJyjqQZ4EAINfdGgb6ImSdVHcG-PlyrRN61iywJn96FX_vScU/pub?output=csv"; 
-
-        // =====================================================================
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'ntd-video-edu-app'; // Mã nhận diện app trên database
 
         // --- BỘ ICON SVG CHUẨN ---
         const IconGraduationCap = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>;
+        const IconLogOut = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>;
+        const IconLock = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
         const IconLayers = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>;
         const IconSearch = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
         const IconVideo = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>;
         const IconCheckCircle = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
+        const IconEdit3 = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
         const IconX = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
+        const IconAlertCircle = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>;
+        const IconSave = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>;
         const IconPlay = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
         const IconMaximize = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>;
         const IconMinimize = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>;
-        const IconExternalLink = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>;
-        const IconFileSpreadsheet = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h2"/><path d="M8 17h2"/><path d="M14 13h2"/><path d="M14 17h2"/></svg>;
 
         // --- HELPER TRÍCH XUẤT YOUTUBE ID ---
         const getYouTubeId = (url) => {
@@ -61,133 +73,137 @@
             return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
         };
 
-        // --- HELPER ĐỌC FILE CSV CHUẨN ---
-        function parseCSV(str) {
-            const arr = [];
-            let quote = false;
-            let col, c;
-            for (let row = col = c = 0; c < str.length; c++) {
-                let cc = str[c], nc = str[c+1];
-                arr[row] = arr[row] || [];
-                arr[row][col] = arr[row][col] || '';
-                if (cc == '"' && quote && nc == '"') { arr[row][col] += cc; ++c; continue; }
-                if (cc == '"') { quote = !quote; continue; }
-                if (cc == ',' && !quote) { ++col; continue; }
-                if (cc == '\r' && nc == '\n' && !quote) { ++row; col = 0; ++c; continue; }
-                if (cc == '\n' && !quote) { ++row; col = 0; continue; }
-                if (cc == '\r' && !quote) { ++row; col = 0; continue; }
-                arr[row][col] += cc;
-            }
-            return arr;
-        }
-
         function App() {
+            const [user, setUser] = useState(null);
             const [exams, setExams] = useState([]);
             const [loading, setLoading] = useState(true);
-            const [errorMsg, setErrorMsg] = useState("");
+            const [dbError, setDbError] = useState('');
             
             // States cho UI
             const [filter, setFilter] = useState('ALL');
             const [searchQuery, setSearchQuery] = useState('');
             const [selectedExam, setSelectedExam] = useState(null);
+            
+            // States cho Admin
+            const [isAdmin, setIsAdmin] = useState(false);
+            const [showLogin, setShowLogin] = useState(false);
+            const [passwordInput, setPasswordInput] = useState('');
+            const [loginError, setLoginError] = useState('');
 
-            // Fetch Dữ liệu từ Google Sheets CSV
+            // 1. Khởi tạo Auth
             useEffect(() => {
-                const loadExamsFromSheet = async () => {
-                    // 1. Tạo sẵn 26 đề rỗng làm khung giao diện
-                    let baseExams = [];
-                    for (let i = 1; i <= 26; i++) {
-                        baseExams.push({
-                            id: `exam_${i}`,
-                            title: `Đề thi số ${i}`,
-                            type: i <= 10 ? 'GK2' : 'CK2', // 1-10 GK2, 11-26 CK2
-                            order: i,
-                            videos: [
-                                { part: 'Phần 1', title: 'Trắc nghiệm', url: '' },
-                                { part: 'Phần 2', title: 'Đúng sai', url: '' },
-                                { part: 'Phần 3', title: 'Trả lời ngắn', url: '' }
-                            ]
-                        });
+                const initAuth = async () => {
+                    try {
+                        await signInAnonymously(auth);
+                    } catch (error) {
+                        console.error("Lỗi đăng nhập Firebase:", error);
+                        setDbError("Lỗi cấu hình: Firebase báo lỗi (auth/configuration-not-found).");
+                        setLoading(false); // Ngừng loading để hiển thị bảng lỗi
                     }
-
-                    // 2. Tải và đắp dữ liệu từ CSV vào
-                    if (PUBLISHED_CSV_URL && PUBLISHED_CSV_URL.startsWith('http')) {
-                        try {
-                            const response = await fetch(PUBLISHED_CSV_URL);
-                            if (!response.ok) throw new Error("Không thể tải file CSV. Vui lòng kiểm tra lại link.");
-                            
-                            const csvText = await response.text();
-                            const rows = parseCSV(csvText);
-
-                            // Bỏ qua dòng tiêu đề (index 0)
-                            for (let i = 1; i < rows.length; i++) {
-                                const cols = rows[i];
-                                if (cols.length >= 4) { // Cần ít nhất 4 cột: MaDe, Video1, Video2, Video3
-                                    const maDe = parseInt(cols[0].trim());
-                                    const url1 = cols[1]?.trim() || '';
-                                    const url2 = cols[2]?.trim() || '';
-                                    const url3 = cols[3]?.trim() || '';
-                                    
-                                    // Tìm đề thi tương ứng trong baseExams và cập nhật URL
-                                    if (!isNaN(maDe)) {
-                                        const examIndex = baseExams.findIndex(e => e.order === maDe);
-                                        if (examIndex !== -1) {
-                                            baseExams[examIndex].videos[0].url = url1;
-                                            baseExams[examIndex].videos[1].url = url2;
-                                            baseExams[examIndex].videos[2].url = url3;
-                                        }
-                                    }
-                                }
-                            }
-                        } catch (error) {
-                            console.error("Lỗi Google Sheets:", error);
-                            setErrorMsg("Không thể đọc dữ liệu từ Google Sheets. Có thể do link CSV chưa chính xác hoặc chưa được Công bố.");
-                        }
-                    }
-                    
-                    setExams(baseExams);
-                    setLoading(false);
                 };
+                initAuth();
 
-                loadExamsFromSheet();
+                const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                    setUser(currentUser);
+                });
+                return () => unsubscribe();
             }, []);
+
+            // 2. Lấy dữ liệu và Khởi tạo 26 đề (nếu trống)
+            useEffect(() => {
+                if (!user) return;
+
+                const examsRef = collection(db, 'artifacts', appId, 'data', 'exams_v4');
+                
+                const unsubscribe = onSnapshot(examsRef, async (snapshot) => {
+                    if (snapshot.empty) {
+                        setLoading(true);
+                        const batchPromises = [];
+                        for (let i = 1; i <= 26; i++) {
+                            const type = i <= 10 ? 'GK2' : 'CK2'; // Đề 1->10 là GK2, 11->26 là CK2
+                            const examId = `exam_v4_${i.toString().padStart(2, '0')}`;
+                            
+                            const newExam = {
+                                id: examId,
+                                title: `Đề thi số ${i}`,
+                                type: type,
+                                order: i,
+                                videos: [
+                                    { part: 'Phần 1', title: 'Trắc nghiệm', url: '' },
+                                    { part: 'Phần 2', title: 'Đúng sai', url: '' },
+                                    { part: 'Phần 3', title: 'Trả lời ngắn', url: '' }
+                                ],
+                                updatedAt: new Date().toISOString()
+                            };
+                            
+                            try {
+                                batchPromises.push(setDoc(doc(examsRef, examId), newExam));
+                            } catch (e) {
+                                console.error("Lỗi quyền ghi Database", e);
+                                setDbError("Lỗi Database: Vui lòng chuyển Cloud Firestore Rules sang chế độ Test Mode.");
+                            }
+                        }
+                        if (batchPromises.length > 0) {
+                            try {
+                                await Promise.all(batchPromises);
+                            } catch(e) {}
+                        }
+                    } else {
+                        const fetchedExams = snapshot.docs.map(doc => ({
+                            id: doc.id,
+                            ...doc.data()
+                        })).sort((a, b) => a.order - b.order);
+                        
+                        setExams(fetchedExams);
+                        setLoading(false);
+                        setDbError('');
+                    }
+                }, (error) => {
+                    console.error("Lỗi tải dữ liệu Firestore:", error);
+                    setLoading(false);
+                    setDbError("Lỗi Database: Vui lòng chuyển Cloud Firestore Rules sang chế độ Test Mode.");
+                });
+
+                return () => unsubscribe();
+            }, [user]);
 
             // Lọc & Tìm kiếm thông minh
             const filteredExams = useMemo(() => {
                 return exams.filter(exam => {
-                    // Lọc theo tabs GK2/CK2
                     const matchType = filter === 'ALL' || exam.type === filter;
-                    
-                    // Chuẩn hóa chuỗi tìm kiếm (xóa dấu tiếng Việt, in thường, xóa khoảng trắng thừa)
                     const normalizedSearch = removeAccents(searchQuery.toLowerCase().trim());
-                    
-                    // Tách chuỗi thành các từ khóa (vd: "đề 1" -> ["de", "1"])
                     const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean);
-                    
                     if (searchTerms.length === 0) return matchType;
-
                     const normalizedTitle = removeAccents(exam.title.toLowerCase());
-                    
-                    // Kiểm tra: TẤT CẢ từ khóa phải có trong tiêu đề
                     const matchesAllTerms = searchTerms.every(term => {
-                        // Nếu từ khóa là số (vd: "1"), dùng regex \b để tìm chính xác số đó, tránh tìm "1" ra "11"
                         if (!isNaN(term)) {
                             const regex = new RegExp(`\\b${term}\\b`);
                             return regex.test(normalizedTitle) || exam.order.toString() === term;
                         }
-                        // Nếu là chữ, chỉ cần chứa từ đó là được
                         return normalizedTitle.includes(term);
                     });
-
                     return matchType && matchesAllTerms;
                 });
             }, [exams, filter, searchQuery]);
 
-            if (loading) {
+            // Xử lý Admin Login
+            const handleAdminLogin = (e) => {
+                e.preventDefault();
+                if (passwordInput === 'admin2026') {
+                    setIsAdmin(true);
+                    setShowLogin(false);
+                    setPasswordInput('');
+                    setLoginError('');
+                } else {
+                    setLoginError('Mật khẩu không chính xác!');
+                }
+            };
+
+            if (loading && !dbError) {
                 return (
                     <div className="min-h-screen flex flex-col items-center justify-center font-sans">
                         <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                        <p className="text-slate-600 font-medium tracking-wide">Đang đồng bộ dữ liệu Google Sheets...</p>
+                        <p className="text-slate-600 font-medium">Đang tải hệ thống video...</p>
                     </div>
                 );
             }
@@ -218,28 +234,39 @@
                         </div>
                     </div>
                     
-                    {/* Nút Cập nhật dữ liệu (Mở link Google Sheet Excel) */}
-                    <a
-                        href={GOOGLE_SHEET_EDIT_URL || "#"}
-                        target={GOOGLE_SHEET_EDIT_URL ? "_blank" : "_self"}
-                        onClick={(e) => {
-                            if(!GOOGLE_SHEET_EDIT_URL) {
-                                e.preventDefault();
-                                alert("Vui lòng thiết lập biến GOOGLE_SHEET_EDIT_URL trong code để sử dụng chức năng này.");
-                            }
-                        }}
-                        className="flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all shadow-sm border bg-white text-slate-600 border-slate-200 hover:bg-purple-50 hover:text-purple-600 hover:border-purple-300"
+                    <button
+                        onClick={() => isAdmin ? setIsAdmin(false) : setShowLogin(true)}
+                        className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all shadow-sm border ${
+                        isAdmin 
+                            ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' 
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-[#FF2E63] hover:border-[#FF2E63]/30'
+                        }`}
                     >
-                        <IconExternalLink className="w-4 h-4" /> <span className="hidden sm:inline">Cập nhật dữ liệu</span><span className="sm:hidden">Sửa</span>
-                    </a>
+                        {isAdmin ? (
+                            <><IconLogOut className="w-4 h-4" /> Thoát Admin</>
+                        ) : (
+                            <><IconLock className="w-4 h-4" /> Quản trị</>
+                        )}
+                    </button>
                     </div>
                 </header>
 
-                {errorMsg && (
-                    <div className="bg-rose-50 border-l-4 border-rose-500 p-4 mx-4 mt-6 max-w-6xl md:mx-auto rounded-r-lg">
-                        <div className="flex items-center">
-                            <div className="ml-3">
-                                <p className="text-sm text-rose-700 font-bold">{errorMsg}</p>
+                {/* Hiển thị lỗi Firebase Auth chi tiết */}
+                {dbError && (
+                    <div className="bg-rose-50 border-2 border-rose-500 p-6 mx-4 mt-6 max-w-6xl md:mx-auto rounded-xl shadow-lg">
+                        <div className="flex items-start gap-4">
+                            <IconAlertCircle className="w-8 h-8 text-rose-600 shrink-0 mt-1"/>
+                            <div>
+                                <h3 className="text-lg font-black text-rose-700 mb-2">Chưa bật Authentication trên Firebase!</h3>
+                                <p className="text-rose-800 font-medium mb-2">{dbError}</p>
+                                <div className="text-sm text-rose-700 space-y-1">
+                                    <p><b>Cách khắc phục:</b></p>
+                                    <p>1. Vào <a href="https://console.firebase.google.com/" target="_blank" className="underline font-bold hover:text-rose-900">Firebase Console</a>.</p>
+                                    <p>2. Chọn dự án <b>ntd688-4ed85</b>.</p>
+                                    <p>3. Chọn menu <b>Authentication</b> (bên trái) &gt; Bấm <b>Get Started</b> (nếu có).</p>
+                                    <p>4. Qua tab <b>Sign-in method</b> &gt; Tìm <b>Anonymous (Ẩn danh)</b> &gt; Chọn <b>Enable (Bật)</b> và Save lại.</p>
+                                    <p>5. Tải lại trang web này là xong!</p>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -274,7 +301,7 @@
                 {/* Main Content */}
                 <main className="max-w-6xl mx-auto px-4 lg:px-6">
                     
-                    {/* Thanh tìm kiếm - Thiết kế chuẩn UX/UI Responsive */}
+                    {/* Thanh tìm kiếm */}
                     <div className="max-w-2xl mx-auto mb-8 relative group px-2 sm:px-0">
                         <IconSearch className="absolute left-6 sm:left-7 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 group-focus-within:text-purple-600 transition-colors z-10" />
                         <input 
@@ -286,7 +313,7 @@
                         />
                     </div>
 
-                    {/* Tabs Filter - Thiết kế bo tròn dạng Pill */}
+                    {/* Tabs Filter */}
                     <div className="flex justify-center mb-12 px-2">
                         <div className="bg-white rounded-full shadow-sm border border-slate-200 p-1.5 flex flex-wrap justify-center gap-1 sm:gap-2">
                             {[
@@ -336,6 +363,11 @@
                                     }`}>
                                         {exam.type === 'GK2' ? 'Giữa Kỳ 2' : 'Cuối Kỳ 2'}
                                     </span>
+                                    {isAdmin && (
+                                        <div className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-slate-400 group-hover:bg-purple-100 group-hover:text-purple-600 group-hover:border-purple-200 transition-colors">
+                                            <IconEdit3 className="w-4 h-4" />
+                                        </div>
+                                    )}
                                 </div>
                                 
                                 <h3 className="text-xl font-extrabold text-slate-800 mb-3 group-hover:text-purple-600 transition-colors line-clamp-2">
@@ -369,7 +401,7 @@
                     })}
                     </div>
                     
-                    {filteredExams.length === 0 && (
+                    {filteredExams.length === 0 && !dbError && (
                         <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 border-dashed mt-8">
                             <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <IconSearch className="w-8 h-8 text-slate-300" />
@@ -380,27 +412,99 @@
                     )}
                 </main>
 
-                {/* Exam Detail Modal (Read-Only) */}
+                {/* Admin Login Modal */}
+                {showLogin && (
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="bg-white rounded-[2rem] p-8 md:p-10 max-w-md w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 border border-slate-100">
+                            <button onClick={() => setShowLogin(false)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 p-2 rounded-full transition-colors">
+                                <IconX className="w-5 h-5" />
+                            </button>
+                            
+                            <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-pink-100 text-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+                                <IconLock className="w-8 h-8" />
+                            </div>
+                            
+                            <h3 className="text-2xl font-black text-center text-slate-800 mb-2 uppercase tracking-tight">Quản Trị Viên</h3>
+                            <p className="text-center text-slate-500 mb-8 text-sm font-medium">Đăng nhập để cập nhật link video bài giảng.</p>
+                            
+                            <form onSubmit={handleAdminLogin}>
+                                <div className="mb-5">
+                                    <input
+                                        type="password"
+                                        placeholder="Nhập mật khẩu (admin2026)"
+                                        value={passwordInput}
+                                        onChange={(e) => setPasswordInput(e.target.value)}
+                                        className="w-full border-2 border-slate-200 focus:border-purple-500 rounded-xl px-5 py-3.5 outline-none transition-all font-medium text-slate-700 bg-slate-50 focus:bg-white"
+                                        autoFocus
+                                    />
+                                </div>
+                                {loginError && (
+                                    <div className="bg-rose-50 text-rose-600 text-sm p-3 rounded-xl mb-5 flex items-center gap-2 font-semibold">
+                                        <IconAlertCircle className="w-4 h-4 shrink-0"/>{loginError}
+                                    </div>
+                                )}
+                                <button 
+                                    type="submit"
+                                    className="w-full bg-gradient-to-r from-[#FF2E63] to-purple-600 hover:from-purple-600 hover:to-[#FF2E63] text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-purple-500/30 active:scale-[0.98]"
+                                >
+                                    Mở khóa hệ thống
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* Exam Detail Modal (Sửa trực tiếp) */}
                 {selectedExam && (
                     <ExamModal 
                         exam={selectedExam} 
+                        isAdmin={isAdmin}
                         onClose={() => setSelectedExam(null)} 
+                        db={db}
+                        appId={appId}
                     />
                 )}
                 </div>
             );
         }
 
-        // Component Modal xem chi tiết Đề thi (Bỏ tính năng Edit trong Modal)
-        function ExamModal({ exam, onClose }) {
+        // Component Modal xem/sửa chi tiết Đề thi
+        function ExamModal({ exam, isAdmin, onClose, db, appId }) {
             const [activeTab, setActiveTab] = useState(0);
+            const [editMode, setEditMode] = useState(false);
+            const [formData, setFormData] = useState([...exam.videos]);
+            const [isSaving, setIsSaving] = useState(false);
             const [isTheaterMode, setIsTheaterMode] = useState(false);
 
             useEffect(() => {
+                setFormData([...exam.videos]);
+                setEditMode(false);
                 setIsTheaterMode(false);
             }, [exam]);
 
-            const currentVideo = exam.videos[activeTab];
+            const handleSave = async () => {
+                setIsSaving(true);
+                try {
+                    const examRef = doc(db, 'artifacts', appId, 'data', 'exams_v4', exam.id);
+                    await updateDoc(examRef, {
+                        videos: formData,
+                        updatedAt: new Date().toISOString()
+                    });
+                    setEditMode(false);
+                } catch (error) {
+                    console.error("Lỗi khi lưu:", error);
+                    alert("Có lỗi xảy ra khi lưu link. Vui lòng kiểm tra quyền truy cập (Firestore Rules).");
+                }
+                setIsSaving(false);
+            };
+
+            const handleUrlChange = (index, value) => {
+                const newData = [...formData];
+                newData[index] = { ...newData[index], url: value };
+                setFormData(newData);
+            };
+
+            const currentVideo = editMode ? formData[activeTab] : exam.videos[activeTab];
             const ytId = getYouTubeId(currentVideo.url);
 
             return (
@@ -431,7 +535,7 @@
                                 <div className="w-full md:w-72 bg-white border-r border-slate-100 p-5 flex flex-col gap-3 shrink-0 overflow-y-auto animate-in slide-in-from-left-4 duration-300">
                                     <div className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Danh sách Video</div>
                                     
-                                    {exam.videos.map((vid, idx) => {
+                                    {formData.map((vid, idx) => {
                                         const hasLink = !!getYouTubeId(vid.url);
                                         return (
                                             <button
@@ -453,6 +557,39 @@
                                             </button>
                                         );
                                     })}
+
+                                    {isAdmin && (
+                                        <div className="mt-auto pt-5 border-t border-slate-100">
+                                            {!editMode ? (
+                                                <button 
+                                                    onClick={() => setEditMode(true)}
+                                                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition-colors shadow-md"
+                                                >
+                                                    <IconEdit3 className="w-4 h-4" /> Bật chế độ sửa link
+                                                </button>
+                                            ) : (
+                                                <div className="flex flex-col gap-2.5 p-3 bg-amber-50 rounded-2xl border border-amber-100">
+                                                    <p className="text-[11px] font-bold text-amber-700 text-center uppercase tracking-wider mb-1">Chế độ chỉnh sửa</p>
+                                                    <button 
+                                                        onClick={handleSave}
+                                                        disabled={isSaving}
+                                                        className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-sm font-bold transition-all shadow-md disabled:opacity-50"
+                                                    >
+                                                        <IconSave className="w-4 h-4" /> {isSaving ? 'Đang lưu...' : 'Lưu tất cả'}
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => {
+                                                            setFormData([...exam.videos]);
+                                                            setEditMode(false);
+                                                        }}
+                                                        className="w-full py-2.5 text-slate-600 hover:text-slate-900 hover:bg-white text-sm font-bold transition-colors bg-white/50 rounded-xl"
+                                                    >
+                                                        Hủy bỏ
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -466,40 +603,88 @@
                                         <span>{currentVideo.part}: <span className="text-slate-600 font-bold">{currentVideo.title}</span></span>
                                     </h3>
 
-                                    <button 
-                                        onClick={() => setIsTheaterMode(!isTheaterMode)}
-                                        className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-200 text-slate-600 hover:text-purple-600 rounded-xl text-sm font-bold transition-all shadow-sm"
-                                    >
-                                        {isTheaterMode ? (
-                                            <><IconMinimize className="w-4 h-4" /> Thu nhỏ</>
-                                        ) : (
-                                            <><IconMaximize className="w-4 h-4" /> Phóng to</>
-                                        )}
-                                    </button>
-                                </div>
-
-                                <div className="flex-1 bg-black rounded-[2rem] overflow-hidden shadow-xl flex items-center justify-center relative aspect-video md:aspect-auto border border-slate-200">
-                                    {ytId ? (
-                                        <iframe
-                                            src={`https://www.youtube.com/embed/${ytId}?rel=0&autoplay=0`}
-                                            title="YouTube video player"
-                                            frameBorder="0"
-                                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                            allowFullScreen
-                                            className="absolute inset-0 w-full h-full"
-                                        ></iframe>
-                                    ) : (
-                                        <div className="text-center p-8 md:p-12 w-full max-w-sm">
-                                            <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-white/10">
-                                                <IconVideo className="w-10 h-10 text-white/40" />
-                                            </div>
-                                            <h4 className="text-white font-black text-xl mb-3">Chưa có Video</h4>
-                                            <p className="text-white/50 text-sm leading-relaxed font-medium">
-                                                Video bài giảng cho phần này đang được biên tập và sẽ cập nhật sớm nhất.
-                                            </p>
-                                        </div>
+                                    {!editMode && (
+                                        <button 
+                                            onClick={() => setIsTheaterMode(!isTheaterMode)}
+                                            className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-200 text-slate-600 hover:text-purple-600 rounded-xl text-sm font-bold transition-all shadow-sm"
+                                        >
+                                            {isTheaterMode ? (
+                                                <><IconMinimize className="w-4 h-4" /> Thu nhỏ</>
+                                            ) : (
+                                                <><IconMaximize className="w-4 h-4" /> Phóng to</>
+                                            )}
+                                        </button>
                                     )}
                                 </div>
+
+                                {editMode ? (
+                                    <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 flex-1 flex flex-col">
+                                        <label className="block text-sm font-black text-slate-700 mb-2 uppercase tracking-wide">Đường dẫn YouTube (URL)</label>
+                                        <div className="relative mb-6">
+                                            <input
+                                                type="text"
+                                                value={currentVideo.url}
+                                                onChange={(e) => handleUrlChange(activeTab, e.target.value)}
+                                                placeholder="Dán link tại đây (vd: https://youtube.com/watch?v=...)"
+                                                className="w-full border-2 border-slate-200 focus:border-purple-500 rounded-2xl px-5 py-4 outline-none transition-all font-medium bg-slate-50 focus:bg-white shadow-inner"
+                                            />
+                                            {currentVideo.url && !ytId && (
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-rose-500 text-xs font-bold flex items-center gap-1 bg-rose-50 px-2 py-1 rounded">
+                                                    <IconAlertCircle className="w-3 h-3" /> Link không hợp lệ
+                                                </span>
+                                            )}
+                                        </div>
+                                        
+                                        <div className="flex-1 bg-slate-100/50 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-300 relative overflow-hidden min-h-[250px]">
+                                            {ytId ? (
+                                                <>
+                                                <div className="absolute top-4 right-4 bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-full font-bold z-10 shadow-md flex items-center gap-1.5"><IconCheckCircle className="w-3.5 h-3.5"/> Nhận diện thành công</div>
+                                                <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} className="w-full h-full object-cover opacity-30 absolute inset-0 mix-blend-multiply" alt="thumbnail" />
+                                                
+                                                <div className="z-10 bg-white/95 backdrop-blur-md px-10 py-8 rounded-3xl text-center shadow-xl border border-slate-100 w-full max-w-sm mx-4">
+                                                    <div className="w-20 h-20 bg-purple-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-purple-100 shadow-inner">
+                                                        <IconVideo className="w-10 h-10 text-purple-600" />
+                                                    </div>
+                                                    <p className="font-black text-slate-800 text-xl mb-1">ID Video</p>
+                                                    <p className="font-mono text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg inline-block font-bold text-lg border border-purple-100 shadow-sm">{ytId}</p>
+                                                    <p className="text-sm text-slate-500 mt-4 font-medium">Video sẽ được cập nhật sau khi bạn lưu.</p>
+                                                </div>
+                                                </>
+                                            ) : (
+                                                <div className="text-center text-slate-400 p-8">
+                                                    <IconVideo className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                                                    <p className="font-semibold text-lg">Khu vực xem trước</p>
+                                                    <p className="text-sm mt-1">Video sẽ hiện ở đây khi dán đúng link YouTube.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex-1 bg-black rounded-[2rem] overflow-hidden shadow-xl flex items-center justify-center relative aspect-video md:aspect-auto border border-slate-200">
+                                        {ytId ? (
+                                            <iframe
+                                                src={`https://www.youtube.com/embed/${ytId}?rel=0&autoplay=0`}
+                                                title="YouTube video player"
+                                                frameBorder="0"
+                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                allowFullScreen
+                                                className="absolute inset-0 w-full h-full"
+                                            ></iframe>
+                                        ) : (
+                                            <div className="text-center p-8 md:p-12 w-full max-w-sm">
+                                                <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-white/10">
+                                                    <IconVideo className="w-10 h-10 text-white/40" />
+                                                </div>
+                                                <h4 className="text-white font-black text-xl mb-3">Chưa có Video</h4>
+                                                <p className="text-white/50 text-sm leading-relaxed font-medium">
+                                                    {isAdmin 
+                                                        ? "Bật chế độ sửa link ở cột bên trái để cập nhật video cho phần này." 
+                                                        : "Video bài giảng cho phần này đang được giáo viên biên tập và sẽ cập nhật sớm nhất."}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -507,71 +692,9 @@
             );
         }
 
-        // --- COMPONENT THÔNG BÁO CHƯA CÀI ĐẶT GOOGLE SHEETS ---
-        function GoogleSheetSetupWarning() {
-            return (
-                <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 font-sans text-slate-800">
-                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-xl max-w-2xl w-full border border-slate-200">
-                        <div className="w-16 h-16 bg-purple-100 text-purple-600 rounded-2xl flex items-center justify-center mb-6">
-                            <IconFileSpreadsheet className="w-8 h-8" />
-                        </div>
-                        <h2 className="text-2xl md:text-3xl font-black text-slate-800 mb-3 tracking-tight">KẾT NỐI GOOGLE SHEETS</h2>
-                        <p className="text-slate-600 mb-6 text-lg leading-relaxed">
-                            Trang web của bạn đang hoạt động nhưng chưa có nguồn dữ liệu. Hãy làm theo 3 bước cực kỳ đơn giản sau để biến file Excel (Sheets) thành nơi lưu trữ link Video của bạn:
-                        </p>
-                        
-                        <div className="space-y-4 mb-8">
-                            <div className="flex gap-4 items-start p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div className="w-8 h-8 bg-blue-100 text-blue-600 font-bold rounded-full flex items-center justify-center shrink-0">1</div>
-                                <div>
-                                    <p className="font-bold text-slate-800">Tạo File Google Sheets</p>
-                                    <p className="text-sm text-slate-500 mt-1">
-                                        Tạo 1 file Google Sheets với 4 cột ở dòng đầu tiên: <br/> 
-                                        <b>MaDe</b>, <b>Link_Phan1</b>, <b>Link_Phan2</b>, <b>Link_Phan3</b>.<br/>
-                                        Từ dòng số 2 trở đi, cột MaDe điền từ 1 đến 26. Các cột link bỏ trống hoặc dán link YouTube vào.
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <div className="flex gap-4 items-start p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div className="w-8 h-8 bg-blue-100 text-blue-600 font-bold rounded-full flex items-center justify-center shrink-0">2</div>
-                                <div>
-                                    <p className="font-bold text-slate-800">Công bố ra Web (Dạng CSV)</p>
-                                    <p className="text-sm text-slate-500 mt-1">
-                                        Trong Google Sheets, bấm menu <b>Tệp (File)</b> > <b>Chia sẻ (Share)</b> > <b>Công bố lên web (Publish to web)</b>.<br/>
-                                        Chọn <b>Định dạng CSV</b> (dấu phẩy phân tách) thay vì Trang Web. Bấm Công bố và copy đường link xuất hiện.
-                                    </p>
-                                </div>
-                            </div>
-
-                            <div className="flex gap-4 items-start p-4 bg-rose-50 rounded-2xl border border-rose-100">
-                                <div className="w-8 h-8 bg-rose-500 text-white font-bold rounded-full flex items-center justify-center shrink-0">3</div>
-                                <div>
-                                    <p className="font-bold text-rose-900">Dán Link vào Code</p>
-                                    <p className="text-sm text-rose-700 mt-1">
-                                        Mở file <code>index.html</code> này lên. Ở ngay dòng 26-27 có biến <code>PUBLISHED_CSV_URL</code>, dán link CSV bạn vừa copy vào trong dấu ngoặc kép. Lưu lại là xong!
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="p-4 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-semibold flex gap-2">
-                            <span className="text-lg">💡</span> Khi bạn dán link xong, màn hình hướng dẫn này sẽ tự động mất đi và hiện ra danh sách 26 đề thi của bạn!
-                        </div>
-                    </div>
-                </div>
-            );
-        }
-
-        // Render ứng dụng
+        // Render ứng dụng vào thẻ div id="root"
         const root = ReactDOM.createRoot(document.getElementById('root'));
-        
-        // Nếu chưa điền link CSV thì hiển thị Bảng hướng dẫn
-        if (!PUBLISHED_CSV_URL) {
-            root.render(<GoogleSheetSetupWarning />);
-        } else {
-            root.render(<App />);
-        }
+        root.render(<App />);
     </script>
 </body>
 </html>
