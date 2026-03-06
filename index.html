@@ -38,7 +38,8 @@
 
     <script type="text/babel" data-type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // Cập nhật import Firebase Auth để hỗ trợ Đăng nhập bằng Mật khẩu
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, onSnapshot, doc, setDoc, getDoc, updateDoc, addDoc, query, orderBy, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const { useState, useEffect, useMemo, useRef } = React;
@@ -58,7 +59,6 @@
         
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
-        const provider = new GoogleAuthProvider();
         const db = getFirestore(app);
         const appId = 'ntd-video-edu-app';
 
@@ -82,6 +82,7 @@
         const IconMessageCircle = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>;
         const IconEdit2 = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>;
         const IconTrophy = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>;
+        const IconUser = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>;
 
         // --- HELPERS ---
         const getYouTubeId = (url) => {
@@ -96,7 +97,7 @@
         function App() {
             // Core States
             const [user, setUser] = useState(null);
-            const [userProfile, setUserProfile] = useState({ points: 0, streak: 0, completedVideos: [] });
+            const [userProfile, setUserProfile] = useState({ points: 0, streak: 0, completedVideos: [], teacherName: '' });
             const [exams, setExams] = useState([]);
             const [leaderboard, setLeaderboard] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -108,6 +109,13 @@
             const [selectedExam, setSelectedExam] = useState(null);
             const [showLeaderboard, setShowLeaderboard] = useState(false);
             
+            // Auth States (Đăng nhập / Đăng ký)
+            const [showAuthModal, setShowAuthModal] = useState(false);
+            const [authMode, setAuthMode] = useState('login'); // 'login' | 'register'
+            const [authForm, setAuthForm] = useState({ fullName: '', teacherName: '', username: '', password: '' });
+            const [authError, setAuthError] = useState('');
+            const [isAuthLoading, setIsAuthLoading] = useState(false);
+
             // Admin States
             const [isAdmin, setIsAdmin] = useState(false);
 
@@ -118,7 +126,6 @@
                     setIsDarkMode(true);
                     document.documentElement.classList.add('dark');
                 } else {
-                    // Mặc định ép sang sáng để đảm bảo hiệu ứng
                     document.documentElement.classList.remove('transition-colors');
                     setTimeout(() => document.documentElement.classList.add('transition-colors'), 50);
                 }
@@ -140,7 +147,6 @@
                 const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
                     setUser(currentUser);
                     if (currentUser) {
-                        // Tính toán Streak (Ngọn lửa)
                         const userRef = doc(db, 'artifacts', appId, 'users', currentUser.uid);
                         const docSnap = await getDoc(userRef);
                         
@@ -148,11 +154,13 @@
                         let newStreak = 1;
                         let currentPoints = 0;
                         let completed = [];
+                        let tName = '';
 
                         if (docSnap.exists()) {
                             const data = docSnap.data();
                             currentPoints = data.points || 0;
                             completed = data.completedVideos || [];
+                            tName = data.teacherName || '';
                             const lastLogin = data.lastLoginDate;
 
                             if (lastLogin) {
@@ -161,47 +169,45 @@
                                 const diffTime = Math.abs(currentDate - lastDate);
                                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
                                 
-                                if (diffDays === 1) newStreak = (data.streak || 0) + 1; // Học liên tiếp
-                                else if (diffDays === 0) newStreak = data.streak || 1; // Đã vào trong ngày
-                                else newStreak = 1; // Chuỗi bị đứt
+                                if (diffDays === 1) newStreak = (data.streak || 0) + 1;
+                                else if (diffDays === 0) newStreak = data.streak || 1;
+                                else newStreak = 1;
                             }
                         }
 
-                        // Cập nhật lên DB
+                        // Cập nhật DB. Dùng merge: true để không làm mất thông tin cũ như teacherName, username
                         await setDoc(userRef, {
                             displayName: currentUser.displayName || 'Học viên',
-                            photoURL: currentUser.photoURL || '',
                             lastLoginDate: today,
                             streak: newStreak,
                             points: currentPoints,
                             completedVideos: completed
                         }, { merge: true });
 
-                        setUserProfile({ points: currentPoints, streak: newStreak, completedVideos: completed });
+                        setUserProfile({ points: currentPoints, streak: newStreak, completedVideos: completed, teacherName: tName });
                     }
                 });
                 return () => unsubscribe();
             }, []);
 
-            // Theo dõi Realtime Profile người dùng (để cập nhật điểm liền)
+            // Theo dõi Realtime Profile người dùng
             useEffect(() => {
                 if (!user) return;
                 const userRef = doc(db, 'artifacts', appId, 'users', user.uid);
                 const unsub = onSnapshot(userRef, (doc) => {
                     if (doc.exists()) {
                         const d = doc.data();
-                        setUserProfile(prev => ({...prev, points: d.points || 0, completedVideos: d.completedVideos || []}));
+                        setUserProfile(prev => ({...prev, points: d.points || 0, completedVideos: d.completedVideos || [], teacherName: d.teacherName || prev.teacherName}));
                     }
                 });
                 return () => unsub();
             }, [user]);
 
-            // 3. Lấy dữ liệu 26 Đề thi
+            // 3. Lấy dữ liệu Đề thi
             useEffect(() => {
                 const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams_v4');
                 const unsubscribe = onSnapshot(examsRef, async (snapshot) => {
                     if (snapshot.empty) {
-                        // Khởi tạo data lần đầu nếu trống
                         for (let i = 1; i <= 26; i++) {
                             const type = i <= 10 ? 'GK2' : 'CK2';
                             const examId = `exam_v4_${i.toString().padStart(2, '0')}`;
@@ -222,20 +228,73 @@
             // 4. Lấy dữ liệu Bảng Xếp Hạng
             useEffect(() => {
                 const usersRef = collection(db, 'artifacts', appId, 'users');
-                const q = query(usersRef, orderBy('points', 'desc')); // Firebase tự lo, ta lấy tất cả rồi limit bằng JS cho an toàn không lỗi Index
+                const q = query(usersRef, orderBy('points', 'desc'));
                 const unsub = onSnapshot(q, (snapshot) => {
                     const topUsers = [];
                     snapshot.forEach(doc => topUsers.push({ id: doc.id, ...doc.data() }));
-                    setLeaderboard(topUsers.slice(0, 10)); // Top 10
+                    setLeaderboard(topUsers.slice(0, 10));
                 });
                 return () => unsub();
             }, []);
 
-            // Chức năng Login/Logout Google
-            const loginGoogle = async () => {
-                try { await signInWithPopup(auth, provider); } 
-                catch (error) { console.error("Lỗi đăng nhập:", error); alert("Có lỗi xảy ra khi đăng nhập Google!"); }
+            // Xử lý Form Đăng Nhập / Đăng Ký
+            const handleAuthSubmit = async (e) => {
+                e.preventDefault();
+                setAuthError('');
+                setIsAuthLoading(true);
+
+                // Tạo chuỗi an toàn cho tên đăng nhập, loại bỏ dấu cách
+                const safeUsername = authForm.username.trim().toLowerCase().replace(/\s+/g, '');
+                if (!safeUsername) {
+                    setAuthError('Vui lòng nhập Tên đăng nhập.');
+                    setIsAuthLoading(false);
+                    return;
+                }
+                
+                // Thủ thuật dùng Firebase Email/Password: Gắn thêm @tamduc.edu.vn vào đằng sau tên đăng nhập
+                const email = `${safeUsername}@tamduc.edu.vn`;
+
+                try {
+                    if (authMode === 'register') {
+                        if (!authForm.fullName || !authForm.teacherName || !authForm.password) {
+                            setAuthError('Vui lòng điền đầy đủ các thông tin!');
+                            setIsAuthLoading(false);
+                            return;
+                        }
+                        // Tạo tài khoản Auth
+                        const userCredential = await createUserWithEmailAndPassword(auth, email, authForm.password);
+                        
+                        // Cập nhật Tên hiển thị trên Auth
+                        await updateProfile(userCredential.user, { displayName: authForm.fullName });
+                        
+                        // Lưu thông tin chi tiết vào Database Users
+                        await setDoc(doc(db, 'artifacts', appId, 'users', userCredential.user.uid), {
+                            displayName: authForm.fullName,
+                            teacherName: authForm.teacherName,
+                            username: safeUsername,
+                            createdAt: serverTimestamp(),
+                            points: 0,
+                            streak: 1,
+                            completedVideos: []
+                        });
+                        setShowAuthModal(false);
+                        setAuthForm({ fullName: '', teacherName: '', username: '', password: '' });
+                    } else {
+                        // Đăng nhập
+                        await signInWithEmailAndPassword(auth, email, authForm.password);
+                        setShowAuthModal(false);
+                        setAuthForm({ fullName: '', teacherName: '', username: '', password: '' });
+                    }
+                } catch (error) {
+                    console.error("Auth error:", error);
+                    if (error.code === 'auth/email-already-in-use') setAuthError('Tên đăng nhập này đã có bạn khác sử dụng, vui lòng chọn tên khác!');
+                    else if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') setAuthError('Tên đăng nhập hoặc mật khẩu không chính xác!');
+                    else if (error.code === 'auth/weak-password') setAuthError('Mật khẩu quá yếu, cần ít nhất 6 ký tự!');
+                    else setAuthError('Lỗi hệ thống: ' + error.message);
+                }
+                setIsAuthLoading(false);
             };
+
             const logout = () => { signOut(auth); setUser(null); setIsAdmin(false); };
 
             // Tìm kiếm
@@ -258,7 +317,7 @@
                 return (
                     <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] dark:bg-slate-900">
                         <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                        <p className="text-slate-600 dark:text-slate-400 font-medium">Đang đồng bộ dữ liệu siêu cấp...</p>
+                        <p className="text-slate-600 dark:text-slate-400 font-medium">Đang tải hệ thống Tâm Đức Pro...</p>
                     </div>
                 );
             }
@@ -279,32 +338,30 @@
                             </div>
                             
                             <div className="flex items-center gap-2 sm:gap-4">
-                                {/* Dark mode toggle */}
                                 <button onClick={toggleDarkMode} className="p-2.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                                     {isDarkMode ? <IconSun className="w-5 h-5"/> : <IconMoon className="w-5 h-5"/>}
                                 </button>
                                 
                                 {user ? (
                                     <div className="flex items-center gap-3">
-                                        {/* Gamification Stats */}
                                         <div className="hidden sm:flex items-center gap-3 px-4 py-1.5 bg-slate-100 dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700">
                                             <div className="flex items-center gap-1 font-bold text-orange-500"><IconFire className="w-5 h-5"/> {userProfile.streak}</div>
                                             <div className="w-px h-4 bg-slate-300 dark:bg-slate-600"></div>
                                             <div className="flex items-center gap-1 font-bold text-yellow-500"><IconStar className="w-5 h-5"/> {userProfile.points}</div>
                                         </div>
                                         
-                                        {/* Profile Dropdown (Simplified as click to logout for now) */}
-                                        <div className="group relative cursor-pointer flex items-center gap-2" onClick={logout} title="Đăng xuất">
-                                            <img src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}&background=random`} alt="Avatar" className="w-9 h-9 rounded-full ring-2 ring-purple-500" />
+                                        <div className="group relative cursor-pointer flex items-center gap-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full pr-4 p-1 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors" onClick={logout} title="Nhấn để đăng xuất">
+                                            <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold uppercase shrink-0">
+                                                {user.displayName?.charAt(0) || 'U'}
+                                            </div>
                                             <div className="hidden md:block text-sm font-bold text-slate-700 dark:text-slate-200">
                                                 {user.displayName?.split(' ')[0]} <IconLogOut className="w-3 h-3 inline ml-1 opacity-50"/>
                                             </div>
                                         </div>
                                     </div>
                                 ) : (
-                                    <button onClick={loginGoogle} className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 px-5 py-2.5 rounded-full text-sm font-bold transition-all shadow-sm">
-                                        <svg className="w-4 h-4" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-                                        Đăng nhập
+                                    <button onClick={() => { setShowAuthModal(true); setAuthMode('login'); }} className="flex items-center gap-2 bg-gradient-to-r from-[#FF2E63] to-purple-600 hover:from-purple-600 hover:to-[#FF2E63] text-white px-5 py-2.5 rounded-full text-sm font-bold transition-all shadow-md">
+                                        <IconUser className="w-4 h-4"/> Đăng Nhập / Đăng Ký
                                     </button>
                                 )}
                             </div>
@@ -318,7 +375,10 @@
                             
                             <div className="relative z-10 max-w-2xl">
                                 {user ? (
-                                    <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-2">Chào mừng trở lại, {user.displayName?.split(' ')[0]}! 👋</h2>
+                                    <>
+                                    <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-2">Chào mừng, {user.displayName}! 👋</h2>
+                                    {userProfile.teacherName && <p className="text-yellow-200 font-bold mb-3 flex items-center gap-2">Học sinh của: {userProfile.teacherName}</p>}
+                                    </>
                                 ) : (
                                     <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight mb-2 uppercase">GIÁO DỤC TÂM ĐỨC <span className="bg-[#FFD700] text-purple-800 text-[11px] font-black px-2 py-0.5 rounded-full align-middle ml-2 shadow-sm">PRO</span></h2>
                                 )}
@@ -332,25 +392,18 @@
                                 )}
                             </div>
 
-                            {/* Nút Leaderboard & Admin */}
                             <div className="relative z-10 flex flex-row md:flex-col gap-3 shrink-0 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
                                 <button onClick={() => setShowLeaderboard(true)} className="flex-1 flex items-center justify-center gap-2 bg-white text-purple-600 hover:bg-purple-50 px-6 py-3 rounded-xl font-bold transition-all shadow-lg whitespace-nowrap">
                                     <IconTrophy className="w-5 h-5"/> Bảng Vàng
                                 </button>
-                                {user && user.email === 'admin@tamduc.edu.vn' && ( // Sửa email admin thực tế của bạn ở đây nếu cần, hoặc giữ nút nhập mật khẩu
-                                    <button onClick={() => setIsAdmin(!isAdmin)} className="flex-1 flex items-center justify-center gap-2 bg-purple-800/50 hover:bg-purple-800/70 backdrop-blur-sm text-white px-6 py-3 rounded-xl font-bold transition-all whitespace-nowrap border border-white/10">
-                                        {isAdmin ? "Tắt Edit" : "Bật Edit Link"}
-                                    </button>
-                                )}
-                                {/* Nút nhập pass admin ẩn danh (Dự phòng) */}
-                                {!isAdmin && (
-                                    <button onClick={() => {
-                                        const pass = prompt("Nhập mật khẩu Admin:");
-                                        if (pass === 'admin2026') setIsAdmin(true); else if (pass) alert("Sai mật khẩu!");
-                                    }} className="flex-1 flex md:hidden items-center justify-center gap-2 bg-purple-800/50 text-white px-6 py-3 rounded-xl font-bold whitespace-nowrap border border-white/10">
-                                        <IconLock className="w-4 h-4"/> Admin
-                                    </button>
-                                )}
+                                {/* Nút dành cho Quản trị viên */}
+                                <button onClick={() => {
+                                    if(isAdmin) { setIsAdmin(false); return; }
+                                    const pass = prompt("Nhập mật khẩu Admin:");
+                                    if (pass === 'admin2026') setIsAdmin(true); else if (pass) alert("Sai mật khẩu!");
+                                }} className={`flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold whitespace-nowrap border transition-all ${isAdmin ? 'bg-rose-500 text-white border-rose-400' : 'bg-purple-800/50 text-white border-white/10 hover:bg-purple-800/70'}`}>
+                                    {isAdmin ? "Tắt Edit Link" : <><IconLock className="w-4 h-4"/> Quản trị</>}
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -358,7 +411,6 @@
                     {/* --- TÌM KIẾM & BỘ LỌC --- */}
                     <div className="max-w-7xl mx-auto px-4">
                         <div className="flex flex-col md:flex-row justify-between items-center gap-6 mb-10">
-                            {/* Tabs Filter */}
                             <div className="bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 p-1.5 flex flex-wrap w-full md:w-auto">
                                 {[{ id: 'ALL', label: 'Tất cả 26 Đề' }, { id: 'GK2', label: '10 Đề GK2' }, { id: 'CK2', label: '16 Đề CK2' }].map((f) => (
                                 <button key={f.id} onClick={() => setFilter(f.id)} className={`flex-1 md:flex-none px-6 py-2.5 rounded-full text-sm font-bold transition-all duration-300 ${filter === f.id ? 'bg-gradient-to-r from-[#FF2E63] to-purple-600 text-white shadow-md' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
@@ -366,7 +418,6 @@
                                 </button>
                                 ))}
                             </div>
-                            {/* Search */}
                             <div className="relative group w-full md:w-80">
                                 <IconSearch className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 z-10" />
                                 <input type="text" placeholder="Tìm kiếm 'đề 1'..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-purple-400 dark:focus:border-purple-500 rounded-full py-3 pl-12 pr-6 outline-none transition-all shadow-sm text-slate-700 dark:text-slate-200 font-medium text-sm" />
@@ -376,10 +427,7 @@
                         {/* --- GRID ĐỀ THI --- */}
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 gap-y-10">
                             {filteredExams.map((exam, index) => {
-                                const hasVideos = exam.videos.some(v => v.url && v.url.trim() !== '');
                                 const availableVideosCount = exam.videos.filter(v => v.url && v.url.trim() !== '').length;
-                                
-                                // Tính toán số video HỌC SINH ĐÃ XEM trong đề này
                                 const completedInThisExam = exam.videos.filter((_, idx) => userProfile.completedVideos.includes(`${exam.id}_${idx}`)).length;
                                 const progressPercent = availableVideosCount === 0 ? 0 : Math.round((completedInThisExam / availableVideosCount) * 100);
 
@@ -389,7 +437,7 @@
                                 return (
                                 <div key={exam.id} className="relative pt-4 pl-4">
                                     <div className={`absolute top-0 left-0 w-10 h-10 ${bgC} text-white rounded-full flex items-center justify-center font-black text-sm shadow-lg z-10 border-[3px] border-white dark:border-slate-900`}>{exam.order}</div>
-                                    <div onClick={() => { if(!user) { alert("Vui lòng Đăng nhập bằng Google để vào học!"); loginGoogle(); } else setSelectedExam(exam); }} className="group bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:shadow-purple-500/10 hover:border-purple-300 dark:hover:border-purple-500 transition-all cursor-pointer flex flex-col h-full relative overflow-hidden">
+                                    <div onClick={() => { if(!user) { setShowAuthModal(true); setAuthMode('register'); } else setSelectedExam(exam); }} className="group bg-white dark:bg-slate-800 rounded-[1.5rem] border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:shadow-purple-500/10 hover:border-purple-300 dark:hover:border-purple-500 transition-all cursor-pointer flex flex-col h-full relative overflow-hidden">
                                         <div className="p-6 flex-1 flex flex-col">
                                             <div className="flex justify-between items-start mb-4">
                                                 <span className={`px-2.5 py-1 text-[10px] font-black rounded uppercase tracking-wider ${exam.type === 'GK2' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'}`}>
@@ -399,7 +447,6 @@
                                             </div>
                                             <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 mb-6 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">{exam.title}</h3>
                                             
-                                            {/* Progress Bar Cá Nhân */}
                                             <div className="mt-auto">
                                                 <div className="flex justify-between text-xs font-bold text-slate-500 dark:text-slate-400 mb-2">
                                                     <span>{availableVideosCount === 0 ? 'Chưa có bài giảng' : `Đã học ${completedInThisExam}/${availableVideosCount} phần`}</span>
@@ -417,6 +464,57 @@
                         </div>
                     </div>
 
+                    {/* --- MODAL ĐĂNG NHẬP / TẠO TÀI KHOẢN MỚI --- */}
+                    {showAuthModal && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm overflow-y-auto">
+                            <div className="bg-white dark:bg-slate-800 rounded-[2rem] p-6 md:p-8 max-w-md w-full shadow-2xl relative my-auto animate-in zoom-in-95 duration-200">
+                                <button onClick={() => setShowAuthModal(false)} className="absolute top-5 right-5 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 p-2 rounded-full"><IconX className="w-5 h-5" /></button>
+                                
+                                <div className="flex justify-center mb-6">
+                                    <div className="bg-slate-100 dark:bg-slate-900 p-1 rounded-full flex gap-1 w-full max-w-xs">
+                                        <button onClick={() => setAuthMode('login')} className={`flex-1 py-2 rounded-full text-sm font-bold transition-colors ${authMode === 'login' ? 'bg-white dark:bg-slate-800 shadow-sm text-purple-600' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}>Đăng nhập</button>
+                                        <button onClick={() => setAuthMode('register')} className={`flex-1 py-2 rounded-full text-sm font-bold transition-colors ${authMode === 'register' ? 'bg-white dark:bg-slate-800 shadow-sm text-purple-600' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-300'}`}>Tạo tài khoản</button>
+                                    </div>
+                                </div>
+
+                                <h3 className="text-2xl font-black text-center text-slate-800 dark:text-white mb-6">
+                                    {authMode === 'login' ? 'Chào mừng trở lại!' : 'Tạo hồ sơ học sinh'}
+                                </h3>
+
+                                <form onSubmit={handleAuthSubmit} className="space-y-4">
+                                    {authMode === 'register' && (
+                                        <>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Họ và Tên</label>
+                                                <input type="text" value={authForm.fullName} onChange={(e) => setAuthForm({...authForm, fullName: e.target.value})} placeholder="VD: Nguyễn Văn A" className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 rounded-xl px-4 py-3 outline-none transition-all font-medium text-slate-800 dark:text-white" />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Giáo viên Tâm Đức đang dạy</label>
+                                                <input type="text" value={authForm.teacherName} onChange={(e) => setAuthForm({...authForm, teacherName: e.target.value})} placeholder="VD: Thầy Minh, Cô Hoa..." className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 rounded-xl px-4 py-3 outline-none transition-all font-medium text-slate-800 dark:text-white" />
+                                            </div>
+                                        </>
+                                    )}
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Tên đăng nhập (viết liền không dấu)</label>
+                                        <input type="text" value={authForm.username} onChange={(e) => setAuthForm({...authForm, username: e.target.value})} placeholder="VD: nguyenvana123" className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 rounded-xl px-4 py-3 outline-none transition-all font-medium text-slate-800 dark:text-white" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 mb-1.5 uppercase tracking-wider">Mật khẩu (ít nhất 6 ký tự)</label>
+                                        <input type="password" value={authForm.password} onChange={(e) => setAuthForm({...authForm, password: e.target.value})} placeholder="********" className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus:border-purple-500 rounded-xl px-4 py-3 outline-none transition-all font-medium text-slate-800 dark:text-white" />
+                                    </div>
+
+                                    {authError && <div className="bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400 text-sm p-3 rounded-xl font-semibold flex items-start gap-2"><IconAlertCircle className="w-5 h-5 shrink-0"/> {authError}</div>}
+
+                                    <button disabled={isAuthLoading} type="submit" className="w-full bg-gradient-to-r from-[#FF2E63] to-purple-600 hover:from-purple-600 hover:to-[#FF2E63] text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-purple-500/30 disabled:opacity-50 mt-4">
+                                        {isAuthLoading ? 'Đang xử lý...' : (authMode === 'login' ? 'Đăng Nhập' : 'Tạo Tài Khoản')}
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
                     {/* --- MODAL LEADERBOARD --- */}
                     {showLeaderboard && (
                         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
@@ -431,10 +529,11 @@
                                     {leaderboard.length === 0 ? <p className="text-center text-slate-500 py-4">Chưa có ai ghi danh...</p> : leaderboard.map((u, idx) => (
                                         <div key={u.id} className={`flex items-center gap-4 p-3 rounded-2xl border ${idx===0 ? 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-700/50' : idx===1 ? 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700' : idx===2 ? 'bg-orange-50 dark:bg-orange-900/10 border-orange-200 dark:border-orange-700/50' : 'bg-white dark:bg-slate-800/50 border-transparent'}`}>
                                             <div className={`w-8 font-black text-center ${idx===0 ? 'text-yellow-500 text-xl' : idx===1 ? 'text-slate-400 text-lg' : idx===2 ? 'text-orange-400 text-lg' : 'text-slate-300 dark:text-slate-600'}`}>#{idx+1}</div>
-                                            <img src={u.photoURL || `https://ui-avatars.com/api/?name=${u.displayName}`} className="w-10 h-10 rounded-full border-2 border-white dark:border-slate-700 shadow-sm"/>
+                                            <div className="w-10 h-10 rounded-full border-2 border-white dark:border-slate-700 shadow-sm bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white font-bold">{u.displayName?.charAt(0) || 'U'}</div>
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-bold text-slate-800 dark:text-slate-200 truncate">{u.displayName}</p>
-                                                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1"><IconFire className="w-3 h-3 text-orange-400"/> {u.streak} ngày</p>
+                                                {u.teacherName && <p className="text-[10px] text-purple-600 dark:text-purple-400 font-bold bg-purple-100 dark:bg-purple-900/30 inline-block px-1.5 py-0.5 rounded truncate max-w-full">GV: {u.teacherName}</p>}
+                                                <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1"><IconFire className="w-3 h-3 text-orange-400"/> {u.streak} ngày</p>
                                             </div>
                                             <div className="font-black text-purple-600 dark:text-purple-400 flex items-center gap-1 bg-purple-50 dark:bg-purple-900/30 px-3 py-1 rounded-xl">{u.points} <IconStar className="w-3 h-3"/></div>
                                         </div>
@@ -461,7 +560,7 @@
 
         // --- COMPONENT MODAL XEM CHI TIẾT ĐỀ THI ---
         function ExamModal({ exam, user, userProfile, isAdmin, onClose, db, appId }) {
-            const [activeTab, setActiveTab] = useState(0); // 0, 1, 2 tương ứng phần 1, 2, 3
+            const [activeTab, setActiveTab] = useState(0); 
             const [editMode, setEditMode] = useState(false);
             const [formData, setFormData] = useState([...exam.videos]);
             const [isSaving, setIsSaving] = useState(false);
@@ -478,10 +577,8 @@
                 setFormData([...exam.videos]); setEditMode(false); setIsTheaterMode(false);
             }, [exam]);
 
-            // Lấy Ghi chú cá nhân & Bình luận khi chuyển tab/đề
             useEffect(() => {
                 if(!user) return;
-                // Fetch Notes
                 const fetchNote = async () => {
                     const noteDoc = await getDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', examPartId));
                     if(noteDoc.exists()) setNoteContent(noteDoc.data().text || '');
@@ -489,7 +586,6 @@
                 };
                 fetchNote();
 
-                // Fetch Comments Realtime
                 const commentsRef = collection(db, 'artifacts', appId, 'public', 'comments', examPartId, 'messages');
                 const q = query(commentsRef, orderBy('createdAt', 'desc'));
                 const unsub = onSnapshot(q, (snapshot) => {
@@ -499,19 +595,18 @@
             }, [examPartId, user]);
 
             const handleMarkCompleted = async () => {
-                if (isCompleted) return; // Đã đánh dấu rồi
+                if (isCompleted) return; 
                 const userRef = doc(db, 'artifacts', appId, 'users', user.uid);
                 await updateDoc(userRef, {
                     completedVideos: [...userProfile.completedVideos, examPartId],
-                    points: userProfile.points + 10 // CỘNG ĐIỂM
+                    points: userProfile.points + 10
                 });
-                // Note: userProfile tự động update qua Realtime Listener ở App
             };
 
             const handleSaveNote = async () => {
                 setIsSavingNote(true);
                 await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'notes', examPartId), { text: noteContent, updatedAt: serverTimestamp() });
-                setTimeout(() => setIsSavingNote(false), 500); // Giả lập loading nhẹ cho mượt
+                setTimeout(() => setIsSavingNote(false), 500); 
             };
 
             const handlePostComment = async (e) => {
@@ -528,7 +623,6 @@
                 setNewComment('');
             };
 
-            // Admin Save Links
             const handleSaveLinks = async () => {
                 setIsSaving(true);
                 await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'exams_v4', exam.id), { videos: formData, updatedAt: new Date().toISOString() });
@@ -542,7 +636,6 @@
                 <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4 bg-slate-900/90 backdrop-blur-md transition-all">
                     <div className={`bg-white dark:bg-slate-900 w-full ${isTheaterMode ? 'md:max-w-[1500px]' : 'md:w-[90vw] md:max-w-7xl'} h-[95vh] md:h-[90vh] rounded-t-3xl md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl border border-slate-200 dark:border-slate-800 animate-in fade-in zoom-in-95 duration-300`}>
                         
-                        {/* Header Modal */}
                         <div className="px-5 md:px-8 py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-between items-center z-20 shrink-0">
                             <div>
                                 <div className="flex items-center gap-2 mb-1">
@@ -553,10 +646,8 @@
                             <button onClick={onClose} className="p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 text-slate-500 rounded-full"><IconX className="w-5 h-5" /></button>
                         </div>
 
-                        {/* Content Split */}
                         <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative bg-slate-50 dark:bg-slate-950">
                             
-                            {/* Cột Trái (Sidebar Navigation) */}
                             {!isTheaterMode && (
                                 <div className="w-full md:w-80 bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 p-4 flex flex-col shrink-0 overflow-y-auto order-2 md:order-1 z-10">
                                     <div className="text-xs font-black text-slate-400 uppercase tracking-wider mb-4">Danh mục bài giảng</div>
@@ -576,7 +667,6 @@
                                         })}
                                     </div>
 
-                                    {/* Khung Admin */}
                                     {isAdmin && (
                                         <div className="mt-auto pt-6 border-t border-slate-100 dark:border-slate-800">
                                             {!editMode ? (
@@ -592,10 +682,8 @@
                                 </div>
                             )}
 
-                            {/* Cột Phải (Video + Gamification Tương tác) */}
                             <div className="flex-1 flex flex-col overflow-y-auto order-1 md:order-2">
                                 
-                                {/* Header Video */}
                                 <div className="p-4 md:p-6 pb-0 flex justify-between items-center gap-4 bg-slate-50 dark:bg-slate-950">
                                     <h3 className="text-xl md:text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-3">
                                         <div className="p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg"><IconPlay className="w-5 h-5 text-purple-600 dark:text-purple-400" fill="currentColor"/></div>
@@ -608,10 +696,8 @@
                                     )}
                                 </div>
 
-                                {/* KHU VỰC CHÍNH (Video Player / Edit) */}
                                 <div className="p-4 md:p-6 w-full max-w-6xl mx-auto flex flex-col gap-6">
                                     
-                                    {/* Video Container 16:9 */}
                                     <div className="w-full bg-black rounded-2xl md:rounded-[2rem] overflow-hidden shadow-2xl relative aspect-video border border-slate-200 dark:border-slate-800">
                                         {editMode ? (
                                             <div className="absolute inset-0 bg-white dark:bg-slate-900 p-8 flex flex-col justify-center">
@@ -632,7 +718,6 @@
                                         )}
                                     </div>
 
-                                    {/* Action Bar (Hoàn thành) */}
                                     {!editMode && ytId && (
                                         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 bg-white dark:bg-slate-800 p-4 md:p-6 rounded-2xl shadow-sm border border-slate-100 dark:border-slate-700">
                                             <div>
@@ -653,10 +738,8 @@
                                         </div>
                                     )}
 
-                                    {/* Tabs Tương tác: Ghi chú & Hỏi đáp */}
                                     {!editMode && ytId && (
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-                                            {/* Smart Notes */}
                                             <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col h-80">
                                                 <div className="flex items-center justify-between mb-4">
                                                     <h4 className="font-black flex items-center gap-2 text-slate-800 dark:text-slate-100"><IconEdit2 className="w-5 h-5 text-blue-500"/> Ghi chú cá nhân</h4>
@@ -673,7 +756,6 @@
                                                 ></textarea>
                                             </div>
 
-                                            {/* Q&A Comments */}
                                             <div className="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-200 dark:border-slate-700 shadow-sm flex flex-col h-80">
                                                 <h4 className="font-black flex items-center gap-2 text-slate-800 dark:text-slate-100 mb-4"><IconMessageCircle className="w-5 h-5 text-purple-500"/> Thảo luận (Hỏi đáp)</h4>
                                                 
@@ -683,7 +765,7 @@
                                                     ) : (
                                                         comments.map(cmt => (
                                                             <div key={cmt.id} className="flex gap-3">
-                                                                <img src={cmt.userPhoto || `https://ui-avatars.com/api/?name=${cmt.userName}`} className="w-8 h-8 rounded-full shrink-0 mt-1"/>
+                                                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center text-white font-bold text-xs shrink-0 mt-1">{cmt.userName?.charAt(0) || 'U'}</div>
                                                                 <div className="bg-slate-50 dark:bg-slate-700/50 p-3 rounded-2xl rounded-tl-none">
                                                                     <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mb-1">{cmt.userName}</p>
                                                                     <p className="text-sm text-slate-600 dark:text-slate-300">{cmt.text}</p>
