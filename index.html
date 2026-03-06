@@ -113,7 +113,8 @@
             useEffect(() => {
                 if (!user) return;
 
-                const examsRef = collection(db, 'artifacts', appId, 'data', 'exams_v4');
+                // Sửa đường dẫn Firebase Database theo đúng chuẩn có số lượng segment lẻ (5 segment)
+                const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams_v4');
                 
                 const unsubscribe = onSnapshot(examsRef, async (snapshot) => {
                     if (snapshot.empty) {
@@ -485,7 +486,8 @@
             const handleSave = async () => {
                 setIsSaving(true);
                 try {
-                    const examRef = doc(db, 'artifacts', appId, 'data', 'exams_v4', exam.id);
+                    // Cập nhật đường dẫn Firebase lúc lưu
+                    const examRef = doc(db, 'artifacts', appId, 'public', 'data', 'exams_v4', exam.id);
                     await updateDoc(examRef, {
                         videos: formData,
                         updatedAt: new Date().toISOString()
