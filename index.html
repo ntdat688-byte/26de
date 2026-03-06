@@ -455,7 +455,7 @@
                     </div>
                 )}
 
-                {/* Exam Detail Modal (Sửa trực tiếp) */}
+                {/* Exam Detail Modal (Sửa giao diện Cửa sổ Video) */}
                 {selectedExam && (
                     <ExamModal 
                         exam={selectedExam} 
@@ -469,7 +469,7 @@
             );
         }
 
-        // Component Modal xem/sửa chi tiết Đề thi
+        // Component Modal xem/sửa chi tiết Đề thi - PHIÊN BẢN MỚI
         function ExamModal({ exam, isAdmin, onClose, db, appId }) {
             const [activeTab, setActiveTab] = useState(0);
             const [editMode, setEditMode] = useState(false);
@@ -486,7 +486,6 @@
             const handleSave = async () => {
                 setIsSaving(true);
                 try {
-                    // Cập nhật đường dẫn Firebase lúc lưu
                     const examRef = doc(db, 'artifacts', appId, 'public', 'data', 'exams_v4', exam.id);
                     await updateDoc(examRef, {
                         videos: formData,
@@ -510,10 +509,12 @@
             const ytId = getYouTubeId(currentVideo.url);
 
             return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md">
-                    <div className={`bg-white rounded-[2rem] w-full ${isTheaterMode ? 'max-w-[1200px] h-[90vh]' : 'max-w-5xl max-h-[90vh]'} flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-300 transition-all`}>
+                <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center sm:p-4 md:p-6 bg-slate-900/85 backdrop-blur-sm transition-all">
+                    {/* KHUNG MODAL MỚI: Rộng 85vw trên máy tính, bo góc lớn, cao tối đa */}
+                    <div className={`bg-white w-full ${isTheaterMode ? 'md:max-w-[1400px]' : 'md:w-[85vw] md:max-w-7xl'} h-[95vh] md:h-[85vh] rounded-t-3xl md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-300 transition-all`}>
                         
-                        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white relative z-10 shadow-sm">
+                        {/* HEADER */}
+                        <div className="px-5 md:px-8 py-4 md:py-5 border-b border-slate-100 flex items-center justify-between bg-white relative z-20 shadow-sm shrink-0">
                             <div>
                                 <div className="flex items-center gap-3 mb-1">
                                     <span className={`px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider rounded border ${
@@ -531,51 +532,56 @@
                             </button>
                         </div>
 
+                        {/* BODY CONTENT: Đảo ngược trật tự order-1 order-2 trên điện thoại để Video hiển thị trước */}
                         <div className="flex-1 overflow-hidden bg-slate-50 flex flex-col md:flex-row relative">
                             
+                            {/* CỘT TRÁI (DANH SÁCH VIDEO) - Nằm phía dưới Video khi dùng điện thoại */}
                             {!isTheaterMode && (
-                                <div className="w-full md:w-72 bg-white border-r border-slate-100 p-5 flex flex-col gap-3 shrink-0 overflow-y-auto animate-in slide-in-from-left-4 duration-300">
-                                    <div className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Danh sách Video</div>
+                                <div className="w-full md:w-[320px] bg-white border-t md:border-t-0 md:border-r border-slate-100 p-4 md:p-6 flex flex-col shrink-0 overflow-y-auto order-2 md:order-1 z-10">
+                                    <div className="text-xs font-black text-slate-400 uppercase tracking-wider mb-3">Danh sách Video</div>
                                     
-                                    {formData.map((vid, idx) => {
-                                        const hasLink = !!getYouTubeId(vid.url);
-                                        return (
-                                            <button
-                                                key={idx}
-                                                onClick={() => setActiveTab(idx)}
-                                                className={`flex flex-col text-left p-3.5 rounded-2xl transition-all border-2 ${
-                                                    activeTab === idx 
-                                                        ? 'border-purple-500 bg-purple-50' 
-                                                        : 'border-transparent hover:bg-slate-50'
-                                                }`}
-                                            >
-                                                <span className={`font-black text-[15px] mb-1 ${activeTab === idx ? 'text-purple-600' : 'text-slate-700'}`}>
-                                                    {vid.part}
-                                                </span>
-                                                <span className="text-xs text-slate-500 flex items-center justify-between font-medium">
-                                                    {vid.title}
-                                                    {hasLink ? <IconCheckCircle className="w-4 h-4 text-emerald-500 shrink-0 ml-2" /> : <div className="w-2 h-2 rounded-full bg-slate-300 shrink-0 ml-2" />}
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
+                                    <div className="flex flex-col gap-3">
+                                        {formData.map((vid, idx) => {
+                                            const hasLink = !!getYouTubeId(vid.url);
+                                            return (
+                                                <button
+                                                    key={idx}
+                                                    onClick={() => setActiveTab(idx)}
+                                                    className={`flex flex-col text-left p-4 rounded-2xl transition-all border-2 ${
+                                                        activeTab === idx 
+                                                            ? 'border-purple-500 bg-purple-50/50 shadow-sm' 
+                                                            : 'border-transparent bg-slate-50 hover:bg-slate-100'
+                                                    }`}
+                                                >
+                                                    <span className={`font-black text-base mb-1 ${activeTab === idx ? 'text-purple-600' : 'text-slate-700'}`}>
+                                                        {vid.part}
+                                                    </span>
+                                                    <span className="text-sm text-slate-500 flex items-center justify-between font-medium">
+                                                        {vid.title}
+                                                        {hasLink ? <IconCheckCircle className="w-4 h-4 text-emerald-500 shrink-0 ml-2" /> : <div className="w-2 h-2 rounded-full bg-slate-300 shrink-0 ml-2" />}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
 
+                                    {/* Khung Admin Nằm bên dưới danh sách */}
                                     {isAdmin && (
-                                        <div className="mt-auto pt-5 border-t border-slate-100">
+                                        <div className="mt-auto pt-6 border-t border-slate-100">
                                             {!editMode ? (
                                                 <button 
                                                     onClick={() => setEditMode(true)}
-                                                    className="w-full flex items-center justify-center gap-2 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition-colors shadow-md"
+                                                    className="w-full flex items-center justify-center gap-2 py-4 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition-colors shadow-md"
                                                 >
                                                     <IconEdit3 className="w-4 h-4" /> Bật chế độ sửa link
                                                 </button>
                                             ) : (
-                                                <div className="flex flex-col gap-2.5 p-3 bg-amber-50 rounded-2xl border border-amber-100">
-                                                    <p className="text-[11px] font-bold text-amber-700 text-center uppercase tracking-wider mb-1">Chế độ chỉnh sửa</p>
+                                                <div className="flex flex-col gap-2.5 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                                    <p className="text-[11px] font-bold text-amber-700 text-center uppercase tracking-wider mb-2">Chế độ chỉnh sửa</p>
                                                     <button 
                                                         onClick={handleSave}
                                                         disabled={isSaving}
-                                                        className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-sm font-bold transition-all shadow-md disabled:opacity-50"
+                                                        className="w-full flex items-center justify-center gap-2 py-3.5 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-sm font-bold transition-all shadow-md disabled:opacity-50"
                                                     >
                                                         <IconSave className="w-4 h-4" /> {isSaving ? 'Đang lưu...' : 'Lưu tất cả'}
                                                     </button>
@@ -584,7 +590,7 @@
                                                             setFormData([...exam.videos]);
                                                             setEditMode(false);
                                                         }}
-                                                        className="w-full py-2.5 text-slate-600 hover:text-slate-900 hover:bg-white text-sm font-bold transition-colors bg-white/50 rounded-xl"
+                                                        className="w-full py-3 text-slate-600 hover:text-slate-900 hover:bg-white text-sm font-bold transition-colors bg-white/60 rounded-xl"
                                                     >
                                                         Hủy bỏ
                                                     </button>
@@ -595,10 +601,11 @@
                                 </div>
                             )}
 
-                            <div className="flex-1 p-4 md:p-6 flex flex-col bg-slate-50/50 overflow-y-auto relative">
+                            {/* CỘT PHẢI (VIDEO PLAYER) - Nằm phía trên cùng khi dùng điện thoại */}
+                            <div className="flex-1 p-4 md:p-8 flex flex-col overflow-y-auto relative order-1 md:order-2 bg-slate-100/50">
                                 
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="text-lg md:text-xl font-black text-slate-800 flex items-center gap-3">
+                                <div className="flex items-start md:items-center justify-between mb-4 md:mb-6 gap-4">
+                                    <h3 className="text-lg md:text-2xl font-black text-slate-800 flex items-center gap-3">
                                         <div className="p-2.5 bg-purple-100 rounded-xl shadow-sm border border-purple-200">
                                             <IconPlay className="w-5 h-5 text-purple-600" fill="currentColor"/>
                                         </div>
@@ -608,85 +615,89 @@
                                     {!editMode && (
                                         <button 
                                             onClick={() => setIsTheaterMode(!isTheaterMode)}
-                                            className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-200 text-slate-600 hover:text-purple-600 rounded-xl text-sm font-bold transition-all shadow-sm"
+                                            className="flex items-center gap-2 px-4 py-2 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-200 text-slate-600 hover:text-purple-600 rounded-xl text-sm font-bold transition-all shadow-sm shrink-0"
                                         >
                                             {isTheaterMode ? (
-                                                <><IconMinimize className="w-4 h-4" /> Thu nhỏ</>
+                                                <><IconMinimize className="w-4 h-4" /> <span className="hidden sm:inline">Thu nhỏ</span></>
                                             ) : (
-                                                <><IconMaximize className="w-4 h-4" /> Phóng to</>
+                                                <><IconMaximize className="w-4 h-4" /> <span className="hidden sm:inline">Phóng to</span></>
                                             )}
                                         </button>
                                     )}
                                 </div>
 
-                                {editMode ? (
-                                    <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 flex-1 flex flex-col">
-                                        <label className="block text-sm font-black text-slate-700 mb-2 uppercase tracking-wide">Đường dẫn YouTube (URL)</label>
-                                        <div className="relative mb-6">
-                                            <input
-                                                type="text"
-                                                value={currentVideo.url}
-                                                onChange={(e) => handleUrlChange(activeTab, e.target.value)}
-                                                placeholder="Dán link tại đây (vd: https://youtube.com/watch?v=...)"
-                                                className="w-full border-2 border-slate-200 focus:border-purple-500 rounded-2xl px-5 py-4 outline-none transition-all font-medium bg-slate-50 focus:bg-white shadow-inner"
-                                            />
-                                            {currentVideo.url && !ytId && (
-                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-rose-500 text-xs font-bold flex items-center gap-1 bg-rose-50 px-2 py-1 rounded">
-                                                    <IconAlertCircle className="w-3 h-3" /> Link không hợp lệ
-                                                </span>
-                                            )}
-                                        </div>
-                                        
-                                        <div className="flex-1 bg-slate-100/50 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-300 relative overflow-hidden min-h-[250px]">
-                                            {ytId ? (
-                                                <>
-                                                <div className="absolute top-4 right-4 bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-full font-bold z-10 shadow-md flex items-center gap-1.5"><IconCheckCircle className="w-3.5 h-3.5"/> Nhận diện thành công</div>
-                                                <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} className="w-full h-full object-cover opacity-30 absolute inset-0 mix-blend-multiply" alt="thumbnail" />
-                                                
-                                                <div className="z-10 bg-white/95 backdrop-blur-md px-10 py-8 rounded-3xl text-center shadow-xl border border-slate-100 w-full max-w-sm mx-4">
-                                                    <div className="w-20 h-20 bg-purple-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-purple-100 shadow-inner">
-                                                        <IconVideo className="w-10 h-10 text-purple-600" />
-                                                    </div>
-                                                    <p className="font-black text-slate-800 text-xl mb-1">ID Video</p>
-                                                    <p className="font-mono text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg inline-block font-bold text-lg border border-purple-100 shadow-sm">{ytId}</p>
-                                                    <p className="text-sm text-slate-500 mt-4 font-medium">Video sẽ được cập nhật sau khi bạn lưu.</p>
-                                                </div>
-                                                </>
-                                            ) : (
-                                                <div className="text-center text-slate-400 p-8">
-                                                    <IconVideo className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                                                    <p className="font-semibold text-lg">Khu vực xem trước</p>
-                                                    <p className="text-sm mt-1">Video sẽ hiện ở đây khi dán đúng link YouTube.</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="flex-1 bg-black rounded-[2rem] overflow-hidden shadow-xl flex items-center justify-center relative aspect-video md:aspect-auto border border-slate-200">
-                                        {ytId ? (
-                                            <iframe
-                                                src={`https://www.youtube.com/embed/${ytId}?rel=0&autoplay=0`}
-                                                title="YouTube video player"
-                                                frameBorder="0"
-                                                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                                                allowFullScreen
-                                                className="absolute inset-0 w-full h-full"
-                                            ></iframe>
-                                        ) : (
-                                            <div className="text-center p-8 md:p-12 w-full max-w-sm">
-                                                <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-white/10">
-                                                    <IconVideo className="w-10 h-10 text-white/40" />
-                                                </div>
-                                                <h4 className="text-white font-black text-xl mb-3">Chưa có Video</h4>
-                                                <p className="text-white/50 text-sm leading-relaxed font-medium">
-                                                    {isAdmin 
-                                                        ? "Bật chế độ sửa link ở cột bên trái để cập nhật video cho phần này." 
-                                                        : "Video bài giảng cho phần này đang được giáo viên biên tập và sẽ cập nhật sớm nhất."}
-                                                </p>
+                                {/* CONTAINER BỌC VIDEO ĐẢM BẢO TỈ LỆ 16:9 */}
+                                <div className="w-full max-w-5xl mx-auto flex-1 flex flex-col justify-center">
+                                    {editMode ? (
+                                        <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 flex flex-col">
+                                            <label className="block text-sm font-black text-slate-700 mb-2 uppercase tracking-wide">Đường dẫn YouTube (URL)</label>
+                                            <div className="relative mb-6">
+                                                <input
+                                                    type="text"
+                                                    value={currentVideo.url}
+                                                    onChange={(e) => handleUrlChange(activeTab, e.target.value)}
+                                                    placeholder="Dán link tại đây (vd: https://youtube.com/watch?v=...)"
+                                                    className="w-full border-2 border-slate-200 focus:border-purple-500 rounded-2xl px-5 py-4 outline-none transition-all font-medium bg-slate-50 focus:bg-white shadow-inner"
+                                                />
+                                                {currentVideo.url && !ytId && (
+                                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-rose-500 text-xs font-bold flex items-center gap-1 bg-rose-50 px-2 py-1 rounded">
+                                                        <IconAlertCircle className="w-3 h-3" /> Link không hợp lệ
+                                                    </span>
+                                                )}
                                             </div>
-                                        )}
-                                    </div>
-                                )}
+                                            
+                                            <div className="w-full bg-slate-100/50 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-300 relative overflow-hidden aspect-video">
+                                                {ytId ? (
+                                                    <>
+                                                    <div className="absolute top-4 right-4 bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-full font-bold z-10 shadow-md flex items-center gap-1.5"><IconCheckCircle className="w-3.5 h-3.5"/> Nhận diện thành công</div>
+                                                    <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} className="w-full h-full object-cover opacity-30 absolute inset-0 mix-blend-multiply" alt="thumbnail" />
+                                                    
+                                                    <div className="z-10 bg-white/95 backdrop-blur-md px-10 py-8 rounded-3xl text-center shadow-xl border border-slate-100 w-full max-w-sm mx-4">
+                                                        <div className="w-20 h-20 bg-purple-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-purple-100 shadow-inner">
+                                                            <IconVideo className="w-10 h-10 text-purple-600" />
+                                                        </div>
+                                                        <p className="font-black text-slate-800 text-xl mb-1">ID Video</p>
+                                                        <p className="font-mono text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg inline-block font-bold text-lg border border-purple-100 shadow-sm">{ytId}</p>
+                                                        <p className="text-sm text-slate-500 mt-4 font-medium">Video sẽ được cập nhật sau khi bạn lưu.</p>
+                                                    </div>
+                                                    </>
+                                                ) : (
+                                                    <div className="text-center text-slate-400 p-8">
+                                                        <IconVideo className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                                                        <p className="font-semibold text-lg">Khu vực xem trước</p>
+                                                        <p className="text-sm mt-1">Video sẽ hiện ở đây khi dán đúng link YouTube.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        /* VÙNG CHỨA VIDEO PLAYER 16:9 CHUẨN XÁC */
+                                        <div className="w-full bg-black rounded-2xl md:rounded-[2rem] overflow-hidden shadow-2xl relative aspect-video border border-slate-800/20 ring-4 ring-slate-900/5">
+                                            {ytId ? (
+                                                <iframe
+                                                    src={`https://www.youtube.com/embed/${ytId}?rel=0&autoplay=0&modestbranding=1&showinfo=0`}
+                                                    title="YouTube video player"
+                                                    frameBorder="0"
+                                                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                                                    allowFullScreen
+                                                    className="absolute inset-0 w-full h-full"
+                                                ></iframe>
+                                            ) : (
+                                                <div className="absolute inset-0 flex flex-col items-center justify-center p-8 md:p-12 text-center bg-gradient-to-br from-slate-900 to-black">
+                                                    <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-6 backdrop-blur-sm border border-white/10 shadow-[0_0_50px_rgba(255,255,255,0.05)]">
+                                                        <IconVideo className="w-10 h-10 text-white/40" />
+                                                    </div>
+                                                    <h4 className="text-white font-black text-2xl mb-3 tracking-tight">Chưa có Video</h4>
+                                                    <p className="text-white/50 text-base leading-relaxed font-medium max-w-md mx-auto">
+                                                        {isAdmin 
+                                                            ? "Bạn chưa gắn link cho video này. Vui lòng bật chế độ sửa link ở menu bên để thêm bài giảng." 
+                                                            : "Video bài giảng cho phần này đang được giáo viên biên tập và sẽ cập nhật sớm nhất."}
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     </div>
