@@ -5,23 +5,23 @@ import {
   Maximize, Minimize
 } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 
 // --- CẤU HÌNH FIREBASE ---
-   const firebaseConfig = {
-            apiKey: "AIzaSyD9CxZobvHbBbLmsOTgpheRBaM4WbilEUk",
-            authDomain: "ntd688-4ed85.firebaseapp.com",
-            projectId: "ntd688-4ed85",
-            storageBucket: "ntd688-4ed85.firebasestorage.app",
-            messagingSenderId: "471849948327",
-            appId: "1:471849948327:web:4d1a9c3e466cc7837cb782",
-            measurementId: "G-N8NB27794M"
-        };
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = 'ntd-video-edu-app';
+const firebaseConfig = {
+  apiKey: "AIzaSyD9CxZobvHbBbLmsOTgpheRBaM4WbilEUk",
+  authDomain: "ntd688-4ed85.firebaseapp.com",
+  projectId: "ntd688-4ed85",
+  storageBucket: "ntd688-4ed85.firebasestorage.app",
+  messagingSenderId: "471849948327",
+  appId: "1:471849948327:web:4d1a9c3e466cc7837cb782",
+  measurementId: "G-N8NB27794M"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = 'ntd-video-edu-app';
 
 // --- HELPER TRÍCH XUẤT YOUTUBE ID ---
 const getYouTubeId = (url) => {
@@ -51,11 +51,9 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        // Bỏ sử dụng token mặc định của hệ thống vì bạn đang dùng cấu hình Firebase riêng
+        // Sử dụng đăng nhập ẩn danh trực tiếp cho dự án của bạn
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Lỗi đăng nhập Firebase:", error);
       }
