@@ -1,462 +1,633 @@
-<!DOCTYPE html>
-<html lang="vi" class="dark">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Hệ Thống Video Giải Đề - Giáo Dục Tâm Đức</title>
-    
-    <!-- Tối ưu hóa tải trang (Preconnect) -->
-    <link rel="preconnect" href="https://cdn.tailwindcss.com">
-    <link rel="preconnect" href="https://unpkg.com">
-    <link rel="preconnect" href="https://www.gstatic.com">
-    
-    <!-- Cài đặt Tailwind CSS và cấu hình Dark Mode -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: { extend: { fontFamily: { sans: ['Inter', 'sans-serif'] } } }
-        }
-    </script>
-    
-    <!-- Cài đặt React & ReactDOM -->
-    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    
-    <!-- Cài đặt Babel -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Play, Edit3, Lock, Unlock, LogOut, Video, 
+  CheckCircle, Search, X, BookOpen, GraduationCap, AlertCircle, Save,
+  Maximize, Minimize
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 
-    <style>
-        /* Tùy chỉnh thanh cuộn siêu mượt */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .dark ::-webkit-scrollbar-thumb { background: #475569; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+// --- CẤU HÌNH FIREBASE ---
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'demo-video-edu-app';
+
+// --- HELPER TRÍCH XUẤT YOUTUBE ID ---
+const getYouTubeId = (url) => {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+};
+
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [exams, setExams] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // States cho UI
+  const [filter, setFilter] = useState('ALL'); // ALL, GK2, CK2, DONE
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedExam, setSelectedExam] = useState(null);
+  
+  // States cho Admin
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [loginError, setLoginError] = useState('');
+
+  // 1. Khởi tạo Auth
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (error) {
+        console.error("Lỗi đăng nhập Firebase:", error);
+      }
+    };
+    initAuth();
+
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // 2. Lấy dữ liệu và Khởi tạo 26 đề (nếu trống)
+  useEffect(() => {
+    if (!user) return;
+
+    // Sử dụng collection exams_v3 để khởi tạo lại chuẩn: 1-10 là GK2, 11-26 là CK2
+    const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams_v3');
+    
+    const unsubscribe = onSnapshot(examsRef, async (snapshot) => {
+      if (snapshot.empty) {
+        setLoading(true);
+        const batchPromises = [];
+        for (let i = 1; i <= 26; i++) {
+          const type = i <= 10 ? 'GK2' : 'CK2'; // Đề 1->10 là GK2, 11->26 là CK2
+          const examId = `exam_v3_${i.toString().padStart(2, '0')}`;
+          
+          const newExam = {
+            id: examId,
+            title: `Đề thi số ${i}`, // Đánh số liên tiếp
+            type: type,
+            order: i, // Tổng thứ tự từ 1-26
+            videos: [
+              { part: 'Phần 1', title: 'Trắc nghiệm', url: '' },
+              { part: 'Phần 2', title: 'Đúng sai', url: '' },
+              { part: 'Phần 3', title: 'Trả lời ngắn', url: '' }
+            ],
+            updatedAt: new Date().toISOString()
+          };
+          
+          batchPromises.push(setDoc(doc(examsRef, examId), newExam));
+        }
+        await Promise.all(batchPromises);
+      } else {
+        const fetchedExams = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        })).sort((a, b) => a.order - b.order);
         
-        /* Ẩn thanh cuộn cho các khu vực vuốt ngang trên Mobile */
-        .hide-scrollbar::-webkit-scrollbar { display: none; }
-        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-        
-        /* Hiệu ứng mượt mà cho Dark Mode */
-        html.transition-colors * { transition-property: background-color, border-color, color, fill, stroke; transition-duration: 300ms; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); }
-    </style>
-</head>
-<body class="bg-[#F8FAFC] dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans pb-10 selection:bg-purple-200 selection:text-purple-900 transition-colors duration-300">
-    <div id="root">
-        <!-- Màn hình chờ (Hiển thị ngay lập tức) -->
-        <div style="display: flex; min-height: 100vh; flex-direction: column; align-items: center; justify-content: center; background-color: #020617;">
-            <div style="width: 48px; height: 48px; border: 4px solid #a855f7; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
-            <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
-            <p style="color: #94a3b8; font-weight: 500; font-family: sans-serif;">Đang kết nối hệ thống Tâm Đức...</p>
+        setExams(fetchedExams);
+        setLoading(false);
+      }
+    }, (error) => {
+      console.error("Lỗi tải dữ liệu:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // Lọc dữ liệu
+  const filteredExams = useMemo(() => {
+    return exams.filter(exam => {
+      const isDone = exam.videos.filter(v => v.url && v.url.trim() !== '').length === 3;
+      let matchType = false;
+      
+      if (filter === 'ALL') matchType = true;
+      else if (filter === 'GK2') matchType = exam.type === 'GK2';
+      else if (filter === 'CK2') matchType = exam.type === 'CK2';
+      else if (filter === 'DONE') matchType = isDone;
+
+      const matchSearch = exam.title.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchType && matchSearch;
+    });
+  }, [exams, filter, searchQuery]);
+
+  // Xử lý Admin Login
+  const handleAdminLogin = (e) => {
+    e.preventDefault();
+    if (passwordInput === 'admin2026') {
+      setIsAdmin(true);
+      setShowLogin(false);
+      setPasswordInput('');
+      setLoginError('');
+    } else {
+      setLoginError('Mật khẩu không chính xác!');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 font-sans">
+        <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-slate-600 font-medium">Đang tải hệ thống video...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans pb-24">
+      {/* Header */}
+      <header className="bg-white shadow-sm sticky top-0 z-30 border-b border-slate-100">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex justify-between items-center">
+          <div className="flex items-center">
+            {/* Chèn Logo Tâm Đức */}
+            <img 
+              src="LOGO_7.jpg" 
+              alt="Giáo Dục Tâm Đức" 
+              className="h-10 md:h-12 w-auto object-contain"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'flex';
+              }}
+            />
+            {/* Fallback UI */}
+            <div className="hidden items-center gap-2">
+               <div className="bg-gradient-to-br from-[#FF2E63] to-purple-600 p-2 rounded-xl">
+                 <GraduationCap className="w-6 h-6 text-white" />
+               </div>
+               <div>
+                 <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF2E63] to-purple-600 uppercase tracking-tight">Tâm Đức</h1>
+               </div>
+            </div>
+          </div>
+          
+          <button
+            onClick={() => isAdmin ? setIsAdmin(false) : setShowLogin(true)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-full text-sm font-bold transition-all shadow-sm border ${
+              isAdmin 
+                ? 'bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100' 
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:text-[#FF2E63] hover:border-[#FF2E63]/30'
+            }`}
+          >
+            {isAdmin ? (
+              <><LogOut className="w-4 h-4" /> Thoát Admin</>
+            ) : (
+              <><Lock className="w-4 h-4" /> Quản trị</>
+            )}
+          </button>
         </div>
-    </div>
+      </header>
 
-    <script type="text/babel" data-type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, onSnapshot, doc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+      {/* Hero Section - Simplified Design */}
+      <div className="max-w-6xl mx-auto px-4 mt-8 mb-8">
+        <div className="bg-gradient-to-r from-[#FF2E63] via-[#E91E63] to-purple-600 text-white py-12 px-6 sm:px-10 rounded-[2rem] shadow-xl relative overflow-hidden flex flex-col items-center text-center">
+          {/* Decorative faint blobs */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-white opacity-[0.05] rounded-full blur-3xl -translate-y-1/2 translate-x-1/4"></div>
+          <div className="absolute bottom-0 left-0 w-60 h-60 bg-white opacity-[0.06] rounded-full blur-2xl translate-y-1/3 -translate-x-1/4"></div>
+          
+          <div className="relative z-10 w-full max-w-4xl flex flex-col items-center">
+            {/* Title Row */}
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-4">
+              <h2 className="text-3xl md:text-4xl font-extrabold tracking-tight uppercase">
+                GIÁO DỤC TÂM ĐỨC
+              </h2>
+              <span className="bg-[#FFD700] text-purple-800 text-[11px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-sm mt-1 sm:mt-0">
+                PRO
+              </span>
+            </div>
+            
+            <p className="text-pink-50 text-base md:text-[17px] max-w-2xl font-medium leading-relaxed opacity-95">
+              Hệ thống tổng hợp video giải chi tiết 26 đề thi giữa kì 2 - cuối kì 2 bám sát chương trình. Luyện đề dễ dàng, nắm chắc kiến thức!
+            </p>
+          </div>
+        </div>
+      </div>
 
-        const { useState, useEffect, useMemo } = React;
-
-        // ==========================================
-        // CẤU HÌNH FIREBASE
-        // ==========================================
-        const firebaseConfig = {
-            apiKey: "AIzaSyD9CxZobvHbBbLmsOTgpheRBaM4WbilEUk",
-            authDomain: "ntd688-4ed85.firebaseapp.com",
-            projectId: "ntd688-4ed85",
-            storageBucket: "ntd688-4ed85.firebasestorage.app",
-            messagingSenderId: "471849948327",
-            appId: "1:471849948327:web:4d1a9c3e466cc7837cb782",
-            measurementId: "G-N8NB27794M"
-        };
+      {/* Main Content */}
+      <main className="max-w-6xl mx-auto px-4">
         
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const appId = 'ntd-video-edu-app';
+        {/* Row controls: Tabs Filter + Search */}
+        <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-10">
+          
+          {/* Tabs Filter */}
+          <div className="w-full md:w-auto overflow-x-auto hide-scrollbar">
+            <div className="bg-white rounded-full shadow-sm border border-slate-200 p-1.5 flex flex-wrap gap-1.5 w-max">
+              {[
+                { id: 'ALL', label: 'Full 26 Đề' },
+                { id: 'GK2', label: '10 Đề GK2' },
+                { id: 'CK2', label: '16 Đề CK2' },
+                { id: 'DONE', label: 'Đã hoàn thành' }
+              ].map((f) => (
+                <button
+                  key={f.id}
+                  onClick={() => setFilter(f.id)}
+                  className={`px-5 py-2.5 rounded-full text-sm font-bold transition-all duration-200 whitespace-nowrap ${
+                    filter === f.id 
+                      ? 'bg-gradient-to-r from-[#FF2E63] to-purple-600 text-white shadow-md' 
+                      : 'text-slate-500 hover:bg-slate-50 hover:text-slate-800'
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
-        // --- BỘ ICON SVG CHUẨN ---
-        const IconGraduationCap = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>;
-        const IconLock = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>;
-        const IconSearch = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>;
-        const IconVideo = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2" ry="2"/></svg>;
-        const IconCheckCircle = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>;
-        const IconEdit3 = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>;
-        const IconX = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>;
-        const IconPlay = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>;
-        const IconMaximize = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg>;
-        const IconMinimize = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/></svg>;
-        const IconMoon = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>;
-        const IconSun = ({className}) => <svg className={className} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>;
+          {/* Search */}
+          <div className="relative group w-full md:w-80">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 transition-colors" />
+            <input 
+              type="text" 
+              placeholder="Tìm kiếm 'đề 1'..." 
+              className="w-full bg-white border border-slate-200 focus:border-purple-400 focus:ring-4 focus:ring-purple-50 rounded-full py-2.5 pl-10 pr-6 outline-none transition-all shadow-sm text-slate-700 font-medium text-sm"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
 
-        // --- HELPERS ---
-        const getYouTubeId = (url) => {
-            if (!url) return null;
-            const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
-            const match = url.match(regExp);
-            return (match && match[2].length === 11) ? match[2] : null;
-        };
-
-        // Bổ sung hàm removeAccents bị thiếu
-        const removeAccents = (str) => {
-            if (!str) return '';
-            return str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D");
-        };
-
-        function App() {
-            const [exams, setExams] = useState([]);
-            const [loading, setLoading] = useState(true);
-            const [isDarkMode, setIsDarkMode] = useState(true); // Ưu tiên giao diện tối
+        {/* Exam Cards Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-x-6 gap-y-10 pt-2">
+          {filteredExams.map((exam, index) => {
+            const hasVideos = exam.videos.some(v => v.url && v.url.trim() !== '');
+            const completedVideos = exam.videos.filter(v => v.url && v.url.trim() !== '').length;
             
-            const [filter, setFilter] = useState('ALL');
-            const [searchQuery, setSearchQuery] = useState('');
-            const [selectedExam, setSelectedExam] = useState(null);
+            // Màu sắc huy hiệu thay đổi rực rỡ (Tím, Hồng, Cam, Xanh)
+            const badgeColors = ['bg-[#9C27B0]', 'bg-[#FF2E63]', 'bg-[#FF9800]', 'bg-[#2196F3]'];
+            const currentBadgeColor = badgeColors[index % badgeColors.length];
+
+            return (
+              <div key={exam.id} className="relative pt-3 pl-3">
+                {/* Number Badge Rực rỡ */}
+                <div className={`absolute top-0 left-0 w-9 h-9 ${currentBadgeColor} text-white rounded-full flex items-center justify-center font-black text-sm shadow-lg z-10 border-[3px] border-white`}>
+                  {exam.order}
+                </div>
+
+                <div 
+                  onClick={() => setSelectedExam(exam)}
+                  className="group bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-2xl hover:shadow-purple-500/10 hover:border-purple-300 transition-all cursor-pointer flex flex-col h-full relative overflow-hidden"
+                >
+                  <div className="p-6 flex-1 flex flex-col">
+                    {/* Tags in card */}
+                    <div className="flex justify-between items-start mb-5">
+                      <span className={`px-2.5 py-1 text-[10px] font-black rounded uppercase tracking-wider ${
+                        exam.type === 'GK2' ? 'bg-indigo-50 text-indigo-600' : 'bg-purple-50 text-purple-600'
+                      }`}>
+                        {exam.type === 'GK2' ? 'Giữa Kỳ 2' : 'Cuối Kỳ 2'}
+                      </span>
+                      
+                      {isAdmin && (
+                        <div className="bg-slate-50 border border-slate-100 p-1.5 rounded-lg text-slate-400 group-hover:bg-purple-100 group-hover:text-purple-600 group-hover:border-purple-200 transition-colors">
+                          <Edit3 className="w-4 h-4" />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* Title */}
+                    <h3 className="text-xl font-extrabold text-slate-800 mb-3 group-hover:text-purple-600 transition-colors line-clamp-2">
+                      {exam.title}
+                    </h3>
+                    
+                    {/* Status Footer */}
+                    <div className="mt-auto pt-5 flex items-center justify-between border-t border-slate-50">
+                       <div className="flex items-center gap-2">
+                          <div className={`p-1.5 rounded-lg transition-colors ${completedVideos > 0 ? 'bg-purple-50 text-purple-500' : 'bg-slate-50 text-slate-400'}`}>
+                            <Video className="w-4 h-4" />
+                          </div>
+                          <span className="text-[13px] font-bold text-slate-600">{completedVideos}/3 Phần</span>
+                       </div>
+                       
+                       {completedVideos === 3 ? (
+                         <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-md flex items-center gap-1 border border-emerald-100">
+                           <CheckCircle className="w-3 h-3" /> Full
+                         </span>
+                       ) : (
+                         <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                           Đang cập nhật
+                         </span>
+                       )}
+                    </div>
+                  </div>
+                  
+                  {/* Decorative Bottom Line (Pink to Purple) */}
+                  <div className={`h-1.5 w-full transition-colors ${hasVideos ? 'bg-gradient-to-r from-[#FF2E63] to-purple-600' : 'bg-slate-100'}`} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        
+        {/* Empty State */}
+        {filteredExams.length === 0 && (
+          <div className="text-center py-20 bg-white rounded-3xl border border-slate-200 border-dashed mt-8">
+            <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Search className="w-8 h-8 text-slate-300" />
+            </div>
+            <h3 className="text-xl font-bold text-slate-700 mb-2">Không tìm thấy đề thi</h3>
+            <p className="text-slate-500 text-sm">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm khác.</p>
+          </div>
+        )}
+      </main>
+
+      {/* Admin Login Modal */}
+      {showLogin && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-[2rem] p-8 md:p-10 max-w-md w-full shadow-2xl relative animate-in fade-in zoom-in-95 duration-200 border border-slate-100">
+            <button onClick={() => setShowLogin(false)} className="absolute top-5 right-5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 p-2 rounded-full transition-colors">
+              <X className="w-5 h-5" />
+            </button>
             
-            const [isAdmin, setIsAdmin] = useState(false);
+            <div className="w-16 h-16 bg-gradient-to-br from-purple-100 to-pink-100 text-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+              <Lock className="w-8 h-8" />
+            </div>
+            
+            <h3 className="text-2xl font-black text-center text-slate-800 mb-2 uppercase tracking-tight">Quản Trị Viên</h3>
+            <p className="text-center text-slate-500 mb-8 text-sm font-medium">Đăng nhập để cập nhật link video bài giảng.</p>
+            
+            <form onSubmit={handleAdminLogin}>
+              <div className="mb-5">
+                <input
+                  type="password"
+                  placeholder="Nhập mật khẩu (admin2026)"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  className="w-full border-2 border-slate-200 focus:border-purple-500 rounded-xl px-5 py-3.5 outline-none transition-all font-medium text-slate-700 bg-slate-50 focus:bg-white"
+                  autoFocus
+                />
+              </div>
+              {loginError && (
+                <div className="bg-rose-50 text-rose-600 text-sm p-3 rounded-xl mb-5 flex items-center gap-2 font-semibold">
+                  <AlertCircle className="w-4 h-4 shrink-0"/>{loginError}
+                </div>
+              )}
+              <button 
+                type="submit"
+                className="w-full bg-gradient-to-r from-[#FF2E63] to-purple-600 hover:from-purple-600 hover:to-[#FF2E63] text-white font-bold py-3.5 rounded-xl transition-all shadow-lg shadow-purple-500/30 active:scale-[0.98]"
+              >
+                Mở khóa hệ thống
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
-            // Khởi tạo Dark Mode mặc định
-            useEffect(() => {
-                const savedTheme = localStorage.getItem('theme');
-                if (savedTheme === 'light') {
-                    setIsDarkMode(false);
-                    document.documentElement.classList.remove('dark');
-                } else {
-                    // Nếu chưa có cài đặt hoặc là dark, thì để mặc định tối
-                    setIsDarkMode(true);
-                    document.documentElement.classList.add('dark');
-                    localStorage.setItem('theme', 'dark');
-                }
-            }, []);
+      {/* Exam Detail / Admin Edit Modal */}
+      {selectedExam && (
+        <ExamModal 
+          exam={selectedExam} 
+          isAdmin={isAdmin} 
+          onClose={() => setSelectedExam(null)} 
+          db={db}
+          appId={appId}
+        />
+      )}
 
-            const toggleDarkMode = () => {
-                if (isDarkMode) {
-                    document.documentElement.classList.remove('dark');
-                    localStorage.setItem('theme', 'light');
-                } else {
-                    document.documentElement.classList.add('dark');
-                    localStorage.setItem('theme', 'dark');
-                }
-                setIsDarkMode(!isDarkMode);
-            };
+    </div>
+  );
+}
 
-            // Auth Ẩn danh
-            useEffect(() => {
-                const initAuth = async () => {
-                    try { await signInAnonymously(auth); } catch (error) { console.error("Lỗi đăng nhập:", error); }
-                };
-                initAuth();
-            }, []);
+// Component Modal xem/sửa chi tiết Đề thi
+function ExamModal({ exam, isAdmin, onClose, db, appId }) {
+  const [activeTab, setActiveTab] = useState(0);
+  const [editMode, setEditMode] = useState(false);
+  const [formData, setFormData] = useState([...exam.videos]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTheaterMode, setIsTheaterMode] = useState(false); // State cho tính năng Phóng to/Thu nhỏ
 
-            // Lấy dữ liệu Đề thi
-            useEffect(() => {
-                const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams_v4');
-                const unsubscribe = onSnapshot(examsRef, async (snapshot) => {
-                    if (snapshot.empty) {
-                        const batchPromises = [];
-                        for (let i = 1; i <= 26; i++) {
-                            const type = i <= 10 ? 'GK2' : 'CK2';
-                            const examId = `exam_v4_${i.toString().padStart(2, '0')}`;
-                            batchPromises.push(setDoc(doc(examsRef, examId), {
-                                id: examId, title: `Đề thi số ${i}`, type: type, order: i,
-                                videos: [{ part: 'Phần 1', title: 'Trắc nghiệm', url: '' }, { part: 'Phần 2', title: 'Đúng sai', url: '' }, { part: 'Phần 3', title: 'Trả lời ngắn', url: '' }]
-                            }));
-                        }
-                        await Promise.all(batchPromises);
-                    } else {
-                        const fetchedExams = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })).sort((a, b) => a.order - b.order);
-                        setExams(fetchedExams);
-                        setLoading(false);
-                    }
-                });
-                return () => unsubscribe();
-            }, []);
+  useEffect(() => {
+    setFormData([...exam.videos]);
+    setEditMode(false);
+    setIsTheaterMode(false); // Reset theater mode khi mở đề mới
+  }, [exam]);
 
-            // Tìm kiếm
-            const filteredExams = useMemo(() => {
-                return exams.filter(exam => {
-                    const matchType = filter === 'ALL' || exam.type === filter;
-                    const normalizedSearch = removeAccents(searchQuery.toLowerCase().trim());
-                    const searchTerms = normalizedSearch.split(/\s+/).filter(Boolean);
-                    if (searchTerms.length === 0) return matchType;
-                    const normalizedTitle = removeAccents(exam.title.toLowerCase());
-                    const matchesAllTerms = searchTerms.every(term => {
-                        if (!isNaN(term)) return new RegExp(`\\b${term}\\b`).test(normalizedTitle) || exam.order.toString() === term;
-                        return normalizedTitle.includes(term);
-                    });
-                    return matchType && matchesAllTerms;
-                });
-            }, [exams, filter, searchQuery]);
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      const examRef = doc(db, 'artifacts', appId, 'public', 'data', 'exams_v3', exam.id);
+      await updateDoc(examRef, {
+        videos: formData,
+        updatedAt: new Date().toISOString()
+      });
+      setEditMode(false);
+    } catch (error) {
+      console.error("Lỗi khi lưu:", error);
+      alert("Có lỗi xảy ra khi lưu link!");
+    }
+    setIsSaving(false);
+  };
 
-            if (loading) {
+  const handleUrlChange = (index, value) => {
+    const newData = [...formData];
+    newData[index] = { ...newData[index], url: value };
+    setFormData(newData);
+  };
+
+  const currentVideo = editMode ? formData[activeTab] : exam.videos[activeTab];
+  const ytId = getYouTubeId(currentVideo.url);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/80 backdrop-blur-md">
+      <div className={`bg-white rounded-[2rem] w-full ${isTheaterMode ? 'max-w-[1200px] h-[90vh]' : 'max-w-5xl max-h-[90vh]'} flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-300 transition-all`}>
+        
+        {/* Modal Header */}
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-white relative z-10 shadow-sm">
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+              <span className={`px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider rounded border ${
+                exam.type === 'GK2' ? 'bg-indigo-50 text-indigo-600 border-indigo-100' : 'bg-purple-50 text-purple-600 border-purple-100'
+              }`}>
+                {exam.type === 'GK2' ? 'Giữa Kỳ 2' : 'Cuối Kỳ 2'}
+              </span>
+              <span className="text-slate-400 text-sm font-bold">•</span>
+              <span className="text-sm font-bold text-slate-500">Video số {exam.order}/26</span>
+            </div>
+            <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">{exam.title}</h2>
+          </div>
+          <button onClick={onClose} className="p-2.5 bg-slate-50 hover:bg-rose-50 hover:text-rose-500 text-slate-500 rounded-full transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Modal Content Split */}
+        <div className="flex-1 overflow-hidden bg-slate-50 flex flex-col md:flex-row relative">
+          
+          {/* Sidebar Tabs - Ẩn khi bật Theater Mode */}
+          {!isTheaterMode && (
+            <div className="w-full md:w-72 bg-white border-r border-slate-100 p-5 flex flex-col gap-3 shrink-0 overflow-y-auto animate-in slide-in-from-left-4 duration-300">
+              <div className="text-xs font-black text-slate-400 uppercase tracking-wider mb-2">Danh sách Video</div>
+              
+              {formData.map((vid, idx) => {
+                const hasLink = !!getYouTubeId(vid.url);
                 return (
-                    <div className="min-h-screen flex flex-col items-center justify-center bg-[#F8FAFC] dark:bg-slate-950">
-                        <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-                        <p className="text-slate-600 dark:text-slate-400 font-medium">Đang tải hệ thống video...</p>
-                    </div>
+                  <button
+                    key={idx}
+                    onClick={() => setActiveTab(idx)}
+                    className={`flex flex-col text-left p-3.5 rounded-2xl transition-all border-2 ${
+                      activeTab === idx 
+                        ? 'border-purple-500 bg-purple-50' 
+                        : 'border-transparent hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className={`font-black text-[15px] mb-1 ${activeTab === idx ? 'text-purple-600' : 'text-slate-700'}`}>
+                      {vid.part}
+                    </span>
+                    <span className="text-xs text-slate-500 flex items-center justify-between font-medium">
+                      {vid.title}
+                      {hasLink ? <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0 ml-2" /> : <div className="w-2 h-2 rounded-full bg-slate-300 shrink-0 ml-2" />}
+                    </span>
+                  </button>
                 );
-            }
+              })}
 
-            return (
-                <div className="font-sans min-h-screen flex flex-col">
-                    {/* --- HEADER --- */}
-                    <header className="bg-white/90 dark:bg-slate-900/90 backdrop-blur-md shadow-sm sticky top-0 z-30 border-b border-slate-200 dark:border-slate-800">
-                        <div className="max-w-7xl mx-auto px-4 py-3 md:py-4 flex justify-between items-center">
-                            <div className="flex items-center">
-                                <img 
-                                    src="LOGO_7 (2).png" 
-                                    alt="Giáo Dục Tâm Đức" 
-                                    className="h-8 sm:h-10 md:h-12 w-auto object-contain"
-                                    onError={(e) => {
-                                        e.target.onerror = null;
-                                        e.target.style.display = 'none';
-                                        e.target.nextSibling.style.display = 'flex';
-                                    }}
-                                />
-                                <div className="hidden items-center gap-2 md:gap-3">
-                                    <div className="bg-gradient-to-br from-[#FF2E63] to-purple-600 p-2 rounded-xl shadow-lg shadow-purple-500/30">
-                                        <IconGraduationCap className="w-5 h-5 md:w-6 md:h-6 text-white" />
-                                    </div>
-                                    <div>
-                                        <h1 className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF2E63] to-purple-600 uppercase tracking-tight hidden sm:block">Giáo Dục Tâm Đức</h1>
-                                        <h1 className="text-lg md:text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-[#FF2E63] to-purple-600 uppercase tracking-tight sm:hidden">Tâm Đức</h1>
-                                    </div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex items-center gap-2 sm:gap-4">
-                                <button onClick={toggleDarkMode} className="p-2 md:p-2.5 rounded-full text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-                                    {isDarkMode ? <IconSun className="w-5 h-5"/> : <IconMoon className="w-5 h-5"/>}
-                                </button>
-                                
-                                <button onClick={() => {
-                                    if(isAdmin) { setIsAdmin(false); return; }
-                                    const pass = prompt("Nhập mật khẩu Admin:");
-                                 if (pass === 'admin2026tdedu') setIsAdmin(true);                                
-                                 else if (pass) alert("Sai mật khẩu!");
-                    {isAdmin ? "Thoát Admin" : <><IconLock className="w-3.5 h-3.5 md:w-4 md:h-4"/> <span className="hidden sm:inline">Quản trị</span></>}
-                                </button>
-                            </div>
-                        </div>
-                    </header>
-
-                    {/* --- MAIN CONTENT --- */}
-                    <main className="flex-1">
-                        {/* --- HERO SECTION --- */}
-                        <div className="max-w-7xl mx-auto px-4 mt-4 md:mt-8 mb-8 md:mb-10">
-                            <div className="bg-gradient-to-r from-[#FF2E63] via-[#E91E63] to-purple-600 text-white py-10 md:py-12 px-6 sm:px-10 rounded-3xl md:rounded-[2rem] shadow-xl shadow-purple-500/20 relative overflow-hidden flex flex-col items-center text-center">
-                                <div className="absolute top-0 right-0 w-80 h-80 bg-white opacity-[0.05] rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"></div>
-                                
-                                <div className="relative z-10 max-w-2xl">
-                                    <h2 className="text-2xl md:text-3xl lg:text-4xl font-extrabold tracking-tight mb-3 md:mb-4 uppercase">
-                                        GIÁO DỤC TÂM ĐỨC <span className="bg-[#FFD700] text-purple-800 text-[10px] md:text-[11px] font-black px-2 py-0.5 rounded-full align-middle ml-2 shadow-sm">PRO</span>
-                                    </h2>
-                                    <p className="text-pink-100 text-sm md:text-base lg:text-lg font-medium leading-relaxed">
-                                        Hệ thống tổng hợp video giải chi tiết 26 đề thi bám sát chương trình. Luyện đề dễ dàng, nắm chắc kiến thức!
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* --- TÌM KIẾM & BỘ LỌC --- */}
-                        <div className="max-w-7xl mx-auto px-4">
-                            <div className="flex flex-col md:flex-row justify-between items-center gap-4 md:gap-6 mb-8 md:mb-10">
-                                <div className="w-full md:w-auto overflow-x-auto hide-scrollbar -mx-4 px-4 md:mx-0 md:px-0">
-                                    <div className="bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 p-1.5 inline-flex w-max md:w-auto gap-1">
-                                        {[{ id: 'ALL', label: 'Tất cả 26 Đề' }, { id: 'GK2', label: '10 Đề GK2' }, { id: 'CK2', label: '16 Đề CK2' }].map((f) => (
-                                        <button key={f.id} onClick={() => setFilter(f.id)} className={`px-5 md:px-6 py-2 md:py-2.5 rounded-full text-xs md:text-sm font-bold transition-all duration-300 whitespace-nowrap ${filter === f.id ? 'bg-gradient-to-r from-[#FF2E63] to-purple-600 text-white shadow-md' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'}`}>
-                                            {f.label}
-                                        </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="relative group w-full md:w-80">
-                                    <IconSearch className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-purple-600 z-10" />
-                                    <input type="text" placeholder="Tìm kiếm 'đề 1'..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 focus:border-purple-400 dark:focus:border-purple-500 rounded-full py-2.5 md:py-3 pl-10 pr-6 outline-none transition-all shadow-sm text-slate-700 dark:text-slate-200 font-medium text-sm" />
-                                </div>
-                            </div>
-
-                            {/* --- GRID ĐỀ THI --- */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 md:gap-6 gap-y-8 md:gap-y-10">
-                                {filteredExams.map((exam, index) => {
-                                    const availableVideosCount = exam.videos.filter(v => v.url && v.url.trim() !== '').length;
-                                    const badgeColors = ['bg-[#9C27B0]', 'bg-[#FF2E63]', 'bg-[#FF9800]', 'bg-[#2196F3]'];
-                                    const bgC = badgeColors[index % badgeColors.length];
-                                    return (
-                                    <div key={exam.id} className="relative pt-3 pl-3 md:pt-4 md:pl-4">
-                                        <div className={`absolute top-0 left-0 w-8 h-8 md:w-10 md:h-10 ${bgC} text-white rounded-full flex items-center justify-center font-black text-xs md:text-sm shadow-lg z-10 border-[3px] border-white dark:border-slate-900`}>{exam.order}</div>
-                                        <div onClick={() => setSelectedExam(exam)} className="group bg-white dark:bg-slate-800 rounded-2xl md:rounded-[1.5rem] border border-slate-200 dark:border-slate-700 shadow-sm hover:shadow-xl hover:shadow-purple-500/10 hover:border-purple-300 dark:hover:border-purple-500 transition-all cursor-pointer flex flex-col h-full relative overflow-hidden">
-                                            <div className="p-5 md:p-6 flex-1 flex flex-col">
-                                                <div className="flex justify-between items-start mb-3 md:mb-4">
-                                                    <span className={`px-2 py-1 text-[9px] md:text-[10px] font-black rounded uppercase tracking-wider ${exam.type === 'GK2' ? 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' : 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'}`}>
-                                                        {exam.type === 'GK2' ? 'Giữa Kỳ 2' : 'Cuối Kỳ 2'}
-                                                    </span>
-                                                    {isAdmin && <div className="bg-slate-100 dark:bg-slate-700 p-1.5 rounded-lg text-slate-500"><IconEdit3 className="w-3 h-3 md:w-4 md:h-4" /></div>}
-                                                </div>
-                                                <h3 className="text-lg md:text-xl font-extrabold text-slate-800 dark:text-slate-100 mb-4 md:mb-6 group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors line-clamp-2">{exam.title}</h3>
-                                                <div className="mt-auto pt-4 md:pt-5 flex items-center justify-between border-t border-slate-50 dark:border-slate-700/50">
-                                                   <div className="flex items-center gap-2">
-                                                      <div className={`p-1.5 rounded-lg transition-colors ${availableVideosCount > 0 ? 'bg-purple-50 dark:bg-purple-900/30 text-purple-500' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>
-                                                         <IconVideo className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                                                      </div>
-                                                      <span className="text-xs md:text-[13px] font-bold text-slate-600 dark:text-slate-300">{availableVideosCount}/3 Phần</span>
-                                                   </div>
-                                                   {availableVideosCount === 3 ? (
-                                                     <span className="text-[10px] md:text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded-md flex items-center gap-1 border border-emerald-100 dark:border-emerald-800">
-                                                       <IconCheckCircle className="w-3 h-3" /> Full
-                                                     </span>
-                                                   ) : (
-                                                     <span className="text-[10px] md:text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider">
-                                                       Đang cập nhật
-                                                     </span>
-                                                   )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-                    </main>
-
-                    {/* --- FOOTER --- */}
-                    <footer className="mt-auto py-8 border-t border-slate-200 dark:border-slate-800 text-center">
-                        <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">
-                            Web được phát triển bởi <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#FF2E63] to-purple-600 font-black">NTD</span>
-                        </p>
-                    </footer>
-
-                    {/* --- EXAM MODAL --- */}
-                    {selectedExam && (
-                        <ExamModal 
-                            exam={selectedExam} 
-                            isAdmin={isAdmin}
-                            onClose={() => setSelectedExam(null)} 
-                            db={db} appId={appId}
-                        />
-                    )}
-                </div>
-            );
-        }
-
-        // --- COMPONENT MODAL XEM CHI TIẾT ĐỀ THI ---
-        function ExamModal({ exam, isAdmin, onClose, db, appId }) {
-            const [activeTab, setActiveTab] = useState(0); 
-            const [editMode, setEditMode] = useState(false);
-            const [formData, setFormData] = useState([...exam.videos]);
-            const [isSaving, setIsSaving] = useState(false);
-            const [isTheaterMode, setIsTheaterMode] = useState(false);
-
-            useEffect(() => {
-                setFormData([...exam.videos]); setEditMode(false); setIsTheaterMode(false);
-            }, [exam]);
-
-            const handleSaveLinks = async () => {
-                setIsSaving(true);
-                await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'exams_v4', exam.id), { videos: formData, updatedAt: new Date().toISOString() });
-                setEditMode(false); setIsSaving(false);
-            };
-
-            const handleUrlChange = (index, value) => {
-                const newData = [...formData];
-                newData[index] = { ...newData[index], url: value };
-                setFormData(newData);
-            };
-
-            const currentVideo = editMode ? formData[activeTab] : exam.videos[activeTab];
-            const ytId = getYouTubeId(currentVideo.url);
-
-            return (
-                <div className="fixed inset-0 z-50 flex items-end md:items-center justify-center p-0 md:p-4 bg-slate-900/95 md:bg-slate-900/80 backdrop-blur-md transition-all">
-                    <div className={`bg-white dark:bg-slate-900 w-full ${isTheaterMode ? 'md:max-w-[1500px]' : 'md:w-[90vw] md:max-w-7xl'} h-[100dvh] md:h-[90vh] rounded-none md:rounded-[2rem] flex flex-col overflow-hidden shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800 animate-in slide-in-from-bottom-5 md:zoom-in-95 duration-300`}>
-                        <div className="px-4 md:px-8 py-3 md:py-4 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex justify-between items-center z-20 shrink-0">
-                            <div className="min-w-0 pr-4">
-                                <div className="flex items-center gap-2 mb-0.5 md:mb-1">
-                                    <span className="bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-0.5 rounded text-[9px] md:text-[10px] font-black uppercase">Đề {exam.order}/26</span>
-                                </div>
-                                <h2 className="text-lg md:text-xl font-black text-slate-800 dark:text-slate-100 truncate">{exam.title}</h2>
-                            </div>
-                            <button onClick={onClose} className="p-2 md:p-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-rose-100 text-slate-500 rounded-full shrink-0"><IconX className="w-5 h-5 md:w-5 md:h-5" /></button>
-                        </div>
-                        <div className="flex-1 overflow-hidden flex flex-col md:flex-row relative bg-slate-50 dark:bg-slate-950">
-                            {!isTheaterMode && (
-                                <div className="w-full md:w-80 flex-1 md:flex-none bg-white dark:bg-slate-900 border-t md:border-t-0 md:border-r border-slate-200 dark:border-slate-800 p-4 md:p-5 flex flex-col overflow-y-auto order-2 md:order-1 z-10">
-                                    <div className="text-[10px] md:text-xs font-black text-slate-400 uppercase tracking-wider mb-3 md:mb-4">Danh mục bài giảng</div>
-                                    <div className="flex flex-col gap-2 md:gap-3">
-                                        {formData.map((vid, idx) => {
-                                            const hasLink = !!getYouTubeId(vid.url);
-                                            return (
-                                                <button key={idx} onClick={() => setActiveTab(idx)} className={`flex flex-col text-left p-3.5 md:p-4 rounded-xl md:rounded-2xl transition-all border-2 ${activeTab === idx ? 'border-purple-500 bg-purple-50 dark:bg-purple-900/20 shadow-sm' : 'border-transparent bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700'}`}>
-                                                    <span className={`font-black text-sm md:text-base mb-1 ${activeTab === idx ? 'text-purple-600 dark:text-purple-400' : 'text-slate-700 dark:text-slate-200'}`}>{vid.part}</span>
-                                                    <span className="text-xs md:text-sm text-slate-500 dark:text-slate-400 flex items-center justify-between font-medium w-full">
-                                                        <span className="truncate pr-2">{vid.title}</span>
-                                                        {hasLink ? <IconCheckCircle className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 shrink-0" /> : <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-slate-300 dark:bg-slate-600 shrink-0"/>}
-                                                    </span>
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                    {isAdmin && (
-                                        <div className="mt-auto pt-5 md:pt-6 border-t border-slate-100 dark:border-slate-800">
-                                            {!editMode ? (
-                                                <button onClick={() => setEditMode(true)} className="w-full flex justify-center gap-2 py-3 md:py-3.5 bg-slate-800 text-white rounded-xl text-sm font-bold shadow-md"><IconEdit3 className="w-4 h-4" /> Bật sửa Link</button>
-                                            ) : (
-                                                <div className="flex flex-col gap-2 p-3 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-100 dark:border-amber-900/50">
-                                                    <button onClick={handleSaveLinks} disabled={isSaving} className="w-full py-3 bg-emerald-500 text-white rounded-xl text-sm font-bold shadow-md">Lưu Tất Cả</button>
-                                                    <button onClick={() => {setFormData([...exam.videos]); setEditMode(false);}} className="w-full py-2 text-slate-600 dark:text-slate-400 font-bold">Hủy</button>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                            <div className="w-full md:flex-1 flex flex-col shrink-0 md:min-h-0 order-1 md:order-2 bg-slate-50 dark:bg-slate-950">
-                                <div className="w-full p-0 md:p-6 pb-0 md:pb-6 shrink-0 z-20">
-                                    <div className="w-full bg-black relative aspect-video md:rounded-[2rem] overflow-hidden md:shadow-2xl border-0 md:border border-slate-200 dark:border-slate-800">
-                                        {editMode ? (
-                                            <div className="absolute inset-0 bg-white dark:bg-slate-900 p-4 md:p-8 flex flex-col justify-center">
-                                                <label className="block text-xs md:text-sm font-black mb-1.5 md:mb-2 text-slate-700 dark:text-slate-200 uppercase tracking-wide">YouTube URL ({currentVideo.part})</label>
-                                                <input type="text" value={currentVideo.url} onChange={(e) => handleUrlChange(activeTab, e.target.value)} className="w-full border-2 border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 rounded-xl md:rounded-2xl px-4 md:px-5 py-3 md:py-4 outline-none font-medium text-slate-800 dark:text-white mb-2 md:mb-4 text-sm" placeholder="Dán link..." />
-                                                {ytId ? <p className="text-emerald-500 text-xs md:text-sm font-bold flex items-center gap-1 md:gap-2"><IconCheckCircle className="w-4 h-4 md:w-5 md:h-5"/> Nhận diện thành công!</p> : (currentVideo.url && <p className="text-rose-500 text-xs md:text-sm font-bold">Link không hợp lệ!</p>)}
-                                            </div>
-                                        ) : (
-                                            ytId ? (
-                                                <iframe src={`https://www.youtube.com/embed/${ytId}?rel=0&playsinline=1`} className="absolute inset-0 w-full h-full" frameBorder="0" allowFullScreen></iframe>
-                                            ) : (
-                                                <div className="absolute inset-0 flex flex-col items-center justify-center p-6 md:p-8 text-center bg-slate-900">
-                                                    <div className="w-16 h-16 md:w-20 md:h-20 bg-white/5 rounded-full flex items-center justify-center mb-3 md:mb-4"><IconVideo className="w-8 h-8 md:w-10 md:h-10 text-white/30" /></div>
-                                                    <h4 className="text-white font-black text-lg md:text-xl mb-1.5 md:mb-2">Video Đang Biên Tập</h4>
-                                                    <p className="text-white/50 text-xs md:text-sm">Bài giảng sẽ sớm được cập nhật.</p>
-                                                </div>
-                                            )
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="p-4 md:px-6 md:pt-0 flex-1 overflow-y-auto">
-                                    <div className="flex justify-between items-center bg-white md:bg-transparent dark:bg-slate-800 md:dark:bg-transparent p-3 md:p-0 rounded-2xl md:rounded-none shadow-sm md:shadow-none border border-slate-100 md:border-transparent dark:border-slate-700 md:dark:border-transparent">
-                                        <h3 className="text-base md:text-2xl font-black text-slate-800 dark:text-slate-100 flex items-center gap-2 md:gap-3">
-                                            <div className="p-1.5 md:p-2 bg-purple-100 dark:bg-purple-900/50 rounded-lg"><IconPlay className="w-4 h-4 md:w-5 md:h-5 text-purple-600 dark:text-purple-400" fill="currentColor"/></div>
-                                            {currentVideo.part}
-                                        </h3>
-                                        {!editMode && (
-                                            <button onClick={() => setIsTheaterMode(!isTheaterMode)} className="hidden md:flex items-center gap-2 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold shadow-sm hover:text-purple-600 transition-colors">
-                                                {isTheaterMode ? <><IconMinimize className="w-4 h-4" /> Thu nhỏ</> : <><IconMaximize className="w-4 h-4" /> Phóng to</>}
-                                            </button>
-                                        )}
-                                    </div>
-                                    <div className="h-4 md:hidden"></div>
-                                </div>
-                            </div>
-                        </div>
+              {/* Admin Controls Panel */}
+              {isAdmin && (
+                <div className="mt-auto pt-5 border-t border-slate-100">
+                  {!editMode ? (
+                    <button 
+                      onClick={() => setEditMode(true)}
+                      className="w-full flex items-center justify-center gap-2 py-3.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-sm font-bold transition-colors shadow-md"
+                    >
+                      <Edit3 className="w-4 h-4" /> Bật chế độ sửa link
+                    </button>
+                  ) : (
+                    <div className="flex flex-col gap-2.5 p-3 bg-amber-50 rounded-2xl border border-amber-100">
+                      <p className="text-[11px] font-bold text-amber-700 text-center uppercase tracking-wider mb-1">Chế độ chỉnh sửa</p>
+                      <button 
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-xl text-sm font-bold transition-all shadow-md disabled:opacity-50"
+                      >
+                        <Save className="w-4 h-4" /> {isSaving ? 'Đang lưu...' : 'Lưu tất cả'}
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setFormData([...exam.videos]);
+                          setEditMode(false);
+                        }}
+                        className="w-full py-2.5 text-slate-600 hover:text-slate-900 hover:bg-white text-sm font-bold transition-colors bg-white/50 rounded-xl"
+                      >
+                        Hủy bỏ
+                      </button>
                     </div>
+                  )}
                 </div>
-            );
-        }
+              )}
+            </div>
+          )}
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
-</body>
-</html>
+          {/* Video / Edit Area */}
+          <div className="flex-1 p-4 md:p-6 flex flex-col bg-slate-50/50 overflow-y-auto relative">
+            
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg md:text-xl font-black text-slate-800 flex items-center gap-3">
+                <div className="p-2.5 bg-purple-100 rounded-xl shadow-sm border border-purple-200">
+                  <Play className="w-5 h-5 text-purple-600" fill="currentColor"/>
+                </div>
+                <span>{currentVideo.part}: <span className="text-slate-600 font-bold">{currentVideo.title}</span></span>
+              </h3>
+
+              {/* Theater Mode Button (Chỉ hiện khi đang xem video, không hiện lúc sửa) */}
+              {!editMode && (
+                <button 
+                  onClick={() => setIsTheaterMode(!isTheaterMode)}
+                  className="flex items-center gap-2 px-3.5 py-2 bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-200 text-slate-600 hover:text-purple-600 rounded-xl text-sm font-bold transition-all shadow-sm"
+                >
+                  {isTheaterMode ? (
+                    <><Minimize className="w-4 h-4" /> Thu nhỏ</>
+                  ) : (
+                    <><Maximize className="w-4 h-4" /> Phóng to</>
+                  )}
+                </button>
+              )}
+            </div>
+
+            {editMode ? (
+              // ADMIN EDIT MODE
+              <div className="bg-white p-6 md:p-8 rounded-[2rem] shadow-sm border border-slate-200 flex-1 flex flex-col">
+                <label className="block text-sm font-black text-slate-700 mb-2 uppercase tracking-wide">Đường dẫn YouTube (URL)</label>
+                <div className="relative mb-6">
+                  <input
+                    type="text"
+                    value={currentVideo.url}
+                    onChange={(e) => handleUrlChange(activeTab, e.target.value)}
+                    placeholder="Dán link tại đây (vd: https://youtube.com/watch?v=...)"
+                    className="w-full border-2 border-slate-200 focus:border-purple-500 rounded-2xl px-5 py-4 outline-none transition-all font-medium bg-slate-50 focus:bg-white shadow-inner"
+                  />
+                  {currentVideo.url && !ytId && (
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-rose-500 text-xs font-bold flex items-center gap-1 bg-rose-50 px-2 py-1 rounded">
+                      <AlertCircle className="w-3 h-3" /> Link không hợp lệ
+                    </span>
+                  )}
+                </div>
+                
+                <div className="flex-1 bg-slate-100/50 rounded-2xl flex items-center justify-center border-2 border-dashed border-slate-300 relative overflow-hidden min-h-[250px]">
+                   {ytId ? (
+                     <>
+                      <div className="absolute top-4 right-4 bg-emerald-500 text-white text-xs px-3 py-1.5 rounded-full font-bold z-10 shadow-md flex items-center gap-1.5"><CheckCircle className="w-3.5 h-3.5"/> Nhận diện thành công</div>
+                      <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} className="w-full h-full object-cover opacity-30 absolute inset-0 mix-blend-multiply" alt="thumbnail" />
+                      
+                      <div className="z-10 bg-white/95 backdrop-blur-md px-10 py-8 rounded-3xl text-center shadow-xl border border-slate-100 w-full max-w-sm mx-4">
+                        <div className="w-20 h-20 bg-purple-50 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-purple-100 shadow-inner">
+                           <Video className="w-10 h-10 text-purple-600" />
+                        </div>
+                        <p className="font-black text-slate-800 text-xl mb-1">ID Video</p>
+                        <p className="font-mono text-purple-600 bg-purple-50 px-3 py-1.5 rounded-lg inline-block font-bold text-lg border border-purple-100 shadow-sm">{ytId}</p>
+                        <p className="text-sm text-slate-500 mt-4 font-medium">Video sẽ được cập nhật sau khi bạn lưu.</p>
+                      </div>
+                     </>
+                   ) : (
+                     <div className="text-center text-slate-400 p-8">
+                        <Video className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p className="font-semibold text-lg">Khu vực xem trước</p>
+                        <p className="text-sm mt-1">Video sẽ hiện ở đây khi dán đúng link YouTube.</p>
+                     </div>
+                   )}
+                </div>
+              </div>
+            ) : (
+              // STUDENT VIEW MODE
+              <div className="flex-1 bg-black rounded-[2rem] overflow-hidden shadow-xl flex items-center justify-center relative aspect-video md:aspect-auto border border-slate-200">
+                {ytId ? (
+                  <iframe
+                    src={`https://www.youtube.com/embed/${ytId}?rel=0&autoplay=0`}
+                    title="YouTube video player"
+                    frameBorder="0"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    allowFullScreen
+                    className="absolute inset-0 w-full h-full"
+                  ></iframe>
+                ) : (
+                  <div className="text-center p-8 md:p-12 w-full max-w-sm">
+                    <div className="w-20 h-20 bg-white/5 rounded-3xl flex items-center justify-center mx-auto mb-6 backdrop-blur-sm border border-white/10">
+                      <Video className="w-10 h-10 text-white/40" />
+                    </div>
+                    <h4 className="text-white font-black text-xl mb-3">Chưa có Video</h4>
+                    <p className="text-white/50 text-sm leading-relaxed font-medium">
+                      {isAdmin 
+                        ? "Bật chế độ sửa link ở cột bên trái để cập nhật video cho phần này." 
+                        : "Video bài giảng cho phần này đang được giáo viên biên tập và sẽ cập nhật sớm nhất."}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
