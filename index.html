@@ -9,11 +9,19 @@ import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged }
 import { getFirestore, collection, onSnapshot, doc, setDoc, updateDoc } from 'firebase/firestore';
 
 // --- CẤU HÌNH FIREBASE ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'demo-video-edu-app';
+   const firebaseConfig = {
+            apiKey: "AIzaSyD9CxZobvHbBbLmsOTgpheRBaM4WbilEUk",
+            authDomain: "ntd688-4ed85.firebaseapp.com",
+            projectId: "ntd688-4ed85",
+            storageBucket: "ntd688-4ed85.firebasestorage.app",
+            messagingSenderId: "471849948327",
+            appId: "1:471849948327:web:4d1a9c3e466cc7837cb782",
+            measurementId: "G-N8NB27794M"
+        };
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = 'ntd-video-edu-app';
 
 // --- HELPER TRÍCH XUẤT YOUTUBE ID ---
 const getYouTubeId = (url) => {
