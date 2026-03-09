@@ -35,6 +35,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [exams, setExams] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [globalError, setGlobalError] = useState(''); // Thêm state quản lý lỗi
   
   // States cho UI
   const [filter, setFilter] = useState('ALL'); // ALL, GK2, CK2, DONE
@@ -51,11 +52,11 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Bỏ sử dụng token mặc định của hệ thống vì bạn đang dùng cấu hình Firebase riêng
-        // Sử dụng đăng nhập ẩn danh trực tiếp cho dự án của bạn
         await signInAnonymously(auth);
       } catch (error) {
         console.error("Lỗi đăng nhập Firebase:", error);
+        setGlobalError(`Lỗi Xác Thực: ${error.message}. Vui lòng vào Firebase Console -> Authentication -> Sign-in method -> Bật Anonymous.`);
+        setLoading(false);
       }
     };
     initAuth();
@@ -74,40 +75,48 @@ export default function App() {
     const examsRef = collection(db, 'artifacts', appId, 'public', 'data', 'exams_v3');
     
     const unsubscribe = onSnapshot(examsRef, async (snapshot) => {
-      if (snapshot.empty) {
-        setLoading(true);
-        const batchPromises = [];
-        for (let i = 1; i <= 26; i++) {
-          const type = i <= 10 ? 'GK2' : 'CK2'; // Đề 1->10 là GK2, 11->26 là CK2
-          const examId = `exam_v3_${i.toString().padStart(2, '0')}`;
+      try {
+        if (snapshot.empty) {
+          setLoading(true);
+          const batchPromises = [];
+          for (let i = 1; i <= 26; i++) {
+            const type = i <= 10 ? 'GK2' : 'CK2'; // Đề 1->10 là GK2, 11->26 là CK2
+            const examId = `exam_v3_${i.toString().padStart(2, '0')}`;
+            
+            const newExam = {
+              id: examId,
+              title: `Đề thi số ${i}`, // Đánh số liên tiếp
+              type: type,
+              order: i, // Tổng thứ tự từ 1-26
+              videos: [
+                { part: 'Phần 1', title: 'Trắc nghiệm', url: '' },
+                { part: 'Phần 2', title: 'Đúng sai', url: '' },
+                { part: 'Phần 3', title: 'Trả lời ngắn', url: '' }
+              ],
+              updatedAt: new Date().toISOString()
+            };
+            
+            batchPromises.push(setDoc(doc(examsRef, examId), newExam));
+          }
+          await Promise.all(batchPromises);
+        } else {
+          const fetchedExams = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          })).sort((a, b) => a.order - b.order);
           
-          const newExam = {
-            id: examId,
-            title: `Đề thi số ${i}`, // Đánh số liên tiếp
-            type: type,
-            order: i, // Tổng thứ tự từ 1-26
-            videos: [
-              { part: 'Phần 1', title: 'Trắc nghiệm', url: '' },
-              { part: 'Phần 2', title: 'Đúng sai', url: '' },
-              { part: 'Phần 3', title: 'Trả lời ngắn', url: '' }
-            ],
-            updatedAt: new Date().toISOString()
-          };
-          
-          batchPromises.push(setDoc(doc(examsRef, examId), newExam));
+          setExams(fetchedExams);
+          setLoading(false);
+          setGlobalError(''); // Clear lỗi nếu lấy data thành công
         }
-        await Promise.all(batchPromises);
-      } else {
-        const fetchedExams = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        })).sort((a, b) => a.order - b.order);
-        
-        setExams(fetchedExams);
+      } catch (err) {
+        console.error("Lỗi xử lý dữ liệu:", err);
+        setGlobalError(`Lỗi Dữ liệu: ${err.message}`);
         setLoading(false);
       }
     }, (error) => {
-      console.error("Lỗi tải dữ liệu:", error);
+      console.error("Lỗi tải dữ liệu Firestore:", error);
+      setGlobalError(`Lỗi Database: ${error.message}. Vui lòng kiểm tra lại cấu hình Firestore Rules (phải cho phép read/write).`);
       setLoading(false);
     });
 
@@ -142,6 +151,28 @@ export default function App() {
       setLoginError('Mật khẩu không chính xác!');
     }
   };
+
+  // MÀN HÌNH BÁO LỖI FIREBASE
+  if (globalError) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 font-sans p-6">
+        <div className="max-w-xl w-full bg-white rounded-2xl shadow-xl border border-rose-100 p-8 text-center">
+          <div className="w-16 h-16 bg-rose-100 text-rose-500 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Không thể kết nối máy chủ</h2>
+          <p className="text-slate-600 mb-6 bg-slate-50 p-4 rounded-xl text-sm border border-slate-200 font-mono text-left break-words">
+            {globalError}
+          </p>
+          <div className="text-sm text-slate-500 text-left space-y-2">
+            <p className="font-semibold text-slate-700">Hướng dẫn khắc phục (dành cho Admin):</p>
+            <p>1. Vào <b>Firebase Console</b> &gt; <b>Authentication</b> &gt; tab <b>Sign-in method</b> &gt; Bật <b>Anonymous</b>.</p>
+            <p>2. Vào <b>Firestore Database</b> &gt; tab <b>Rules</b> &gt; Sửa rule thành <code className="bg-slate-100 px-1 rounded">allow read, write: if true;</code></p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
